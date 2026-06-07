@@ -161,6 +161,20 @@ img { display: block; max-width: 100%; }
 .adminbar button { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
 .adminbar .user { opacity: 0.55; }
 
+.export-wrap { position: relative; display: inline-flex; }
+.export-menu {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  background: #fff; border: 1px solid #e3e3df; border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12); padding: 6px; min-width: 210px;
+  z-index: 60; font-family: 'Inter', sans-serif; font-style: normal;
+}
+.export-wrap.open .export-menu { display: block; }
+.export-menu button {
+  display: block; width: 100%; text-align: left; color: #1a1a1a;
+  font-size: 13px; padding: 9px 12px; border-radius: 6px; white-space: nowrap;
+}
+.export-menu button:hover { background: #f3f3f0; }
+
 /* ============================================================
    STYLE 1: MAGAZINE EDITORIAL
    ============================================================ */
@@ -1022,7 +1036,14 @@ body.is-previewing { padding-top: 52px; }
     <span class="user" id="bar-user"></span>
     <button id="bar-copy-link" class="copy-link-btn" style="display:none;" title="复制我的作品集链接">🔗 复制链接</button>
     <button id="bar-switch" style="display:none;">换风格</button>
-    <button id="bar-export" style="display:none;">导出</button>
+    <div id="export-wrap" class="export-wrap" style="display:none;">
+      <button id="bar-export">导出 ▾</button>
+      <div id="export-menu" class="export-menu">
+        <button data-export="pdf">PDF（打印 / 另存为 PDF）</button>
+        <button data-export="word">Word 文档（.doc）</button>
+        <button data-export="json">备份文件（.json）</button>
+      </div>
+    </div>
     <button id="bar-import" style="display:none;">导入</button>
     <button id="bar-logout" style="display:none;">退出</button>
     <button id="bar-login">GitHub 登录</button>
@@ -1238,7 +1259,7 @@ body.is-previewing { padding-top: 52px; }
       adminbar.style.display = 'none';
     } else {
       adminbar.style.display = '';
-      $('bar-export').style.display = state.isAdmin ? '' : 'none';
+      $('export-wrap').style.display = state.isAdmin ? 'inline-flex' : 'none';
       $('bar-import').style.display = state.isAdmin ? '' : 'none';
       $('bar-logout').style.display = state.isAdmin ? '' : 'none';
       $('bar-switch').style.display = state.isAdmin ? '' : 'none';
@@ -1979,7 +2000,30 @@ body.is-previewing { padding-top: 52px; }
   /* Back/forward button support */
   window.addEventListener('popstate', () => { loadPortfolio(); });
 
-  $('bar-export').onclick = () => {
+  /* ── EXPORT: dropdown menu ── */
+  $('bar-export').onclick = (e) => {
+    e.stopPropagation();
+    $('export-wrap').classList.toggle('open');
+  };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#export-wrap')) $('export-wrap').classList.remove('open');
+  });
+  $('export-menu').onclick = (e) => {
+    const btn = e.target.closest('button[data-export]');
+    if (!btn) return;
+    $('export-wrap').classList.remove('open');
+    const kind = btn.dataset.export;
+    if (kind === 'json') exportJSON();
+    else if (kind === 'pdf') exportPDF();
+    else if (kind === 'word') exportWord();
+  };
+
+  function exportFilename(ext) {
+    const base = (getDisplayName() || 'portfolio').replace(/[\\/:*?"<>|]+/g, '').trim() || 'portfolio';
+    return base + '-简历.' + ext;
+  }
+
+  function exportJSON() {
     const data = { theme: state.theme, profile: state.profile, projects: state.projects, exported: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
@@ -1987,7 +2031,113 @@ body.is-previewing { padding-top: 52px; }
     a.href = url; a.download = 'portfolio-backup.json'; a.click();
     URL.revokeObjectURL(url);
     toast('已导出备份');
-  };
+  }
+
+  // Shared resume markup used by both PDF (print) and Word export.
+  function buildResumeHTML() {
+    const name    = getDisplayName();
+    const tagline = state.profile.tagline || '';
+    const bio     = state.profile.bio || '';
+    const socials = getSocials();
+    const projects = [...state.projects].sort((a, b) => (b.created_epoch || 0) - (a.created_epoch || 0));
+
+    const avatarHtml = state.profile.avatar
+      ? `<img class="r-avatar" src="${state.profile.avatar}" alt="">` : '';
+
+    const socialHtml = socials.length
+      ? `<div class="r-contact">${socials.map(s =>
+          `<span class="r-contact-item">${esc(s.name)}: ${esc((s.url || '').replace(/^mailto:/, ''))}</span>`
+        ).join('')}</div>`
+      : '';
+
+    const bioHtml = bio
+      ? `<section class="r-section"><h2>关于我</h2><p class="r-bio">${esc(bio)}</p></section>` : '';
+
+    const projHtml = projects.length ? `
+      <section class="r-section">
+        <h2>作品 / 项目</h2>
+        ${projects.map(p => {
+          const tags = (p.tags || []).length
+            ? `<div class="r-tags">${(p.tags || []).map(t => `<span class="r-tag">${esc(t)}</span>`).join('')}</div>` : '';
+          const tech = p.tech ? `<div class="r-meta"><strong>技术 / 工具：</strong>${esc(p.tech)}</div>` : '';
+          const link = p.link ? `<div class="r-meta"><strong>链接：</strong>${esc(p.link)}</div>` : '';
+          const desc = p.description ? `<p class="r-desc">${esc(p.description)}</p>` : '';
+          return `
+            <div class="r-project">
+              <h3>${esc(p.title || '(未命名项目)')}</h3>
+              ${tags}${desc}${tech}${link}
+            </div>`;
+        }).join('')}
+      </section>` : '';
+
+    return `
+      <header class="r-header">
+        ${avatarHtml}
+        <div class="r-head-text">
+          <h1>${esc(name)}</h1>
+          ${tagline ? `<p class="r-tagline">${esc(tagline)}</p>` : ''}
+          ${socialHtml}
+        </div>
+      </header>
+      ${bioHtml}
+      ${projHtml}`;
+  }
+
+  // Print-oriented stylesheet, reused (minus print rules) for Word.
+  const RESUME_CSS = `
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+      color: #222; line-height: 1.65; margin: 0; }
+    .r-page { max-width: 760px; margin: 0 auto; padding: 48px 40px; }
+    .r-header { display: flex; align-items: center; gap: 22px; border-bottom: 2px solid #1a1a1a;
+      padding-bottom: 20px; margin-bottom: 26px; }
+    .r-avatar { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; flex: none; }
+    .r-head-text h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: 0.01em; }
+    .r-tagline { font-size: 15px; color: #555; margin: 0 0 8px; }
+    .r-contact { font-size: 12.5px; color: #444; }
+    .r-contact-item { margin-right: 16px; white-space: nowrap; }
+    .r-section { margin-bottom: 26px; }
+    .r-section h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin: 0 0 14px; }
+    .r-bio { font-size: 14px; color: #333; white-space: pre-wrap; margin: 0; }
+    .r-project { margin-bottom: 18px; page-break-inside: avoid; }
+    .r-project h3 { font-size: 15.5px; margin: 0 0 6px; }
+    .r-desc { font-size: 13.5px; color: #333; white-space: pre-wrap; margin: 4px 0; }
+    .r-meta { font-size: 12.5px; color: #555; margin: 2px 0; }
+    .r-meta strong { color: #333; }
+    .r-tags { margin: 4px 0; }
+    .r-tag { display: inline-block; font-size: 11px; color: #555; background: #f0f0ec;
+      border-radius: 10px; padding: 2px 10px; margin: 0 6px 4px 0; }`;
+
+  function exportPDF() {
+    const w = window.open('', '_blank');
+    if (!w) { toast('请允许弹出窗口后重试'); return; }
+    w.document.write(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+      <title>${esc(getDisplayName())} · 简历</title>
+      <style>${RESUME_CSS}
+        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .r-page { padding: 0; } }
+      </style></head>
+      <body><div class="r-page">${buildResumeHTML()}</div></body></html>`);
+    w.document.close();
+    // Give images/fonts a moment to load before invoking the print dialog.
+    w.onload = () => { w.focus(); setTimeout(() => w.print(), 250); };
+    toast('已生成，请在打印窗口选择"另存为 PDF"');
+  }
+
+  function exportWord() {
+    const html = `<!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="UTF-8"><title>${esc(getDisplayName())} 简历</title>
+      <style>${RESUME_CSS}</style></head>
+      <body><div class="r-page">${buildResumeHTML()}</div></body></html>`;
+    const blob = new Blob(['﻿', html], { type: 'application/msword' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = exportFilename('doc'); a.click();
+    URL.revokeObjectURL(url);
+    toast('已导出 Word 文档');
+  }
 
   $('bar-import').onclick = () => $('import-file').click();
   $('import-file').onchange = e => {
