@@ -75,6 +75,7 @@ img { display: block; max-width: 100%; }
   color: #999; font-size: 13px;
 }
 .upload-zone:hover { border-color: #888; color: #555; }
+.upload-zone.dragover { border-color: #555; border-style: solid; background: #f0f0ea; color: #333; }
 .upload-zone.has-img { padding: 0; background: none; border: 1px solid #e3e3df; overflow: hidden; }
 .upload-zone.has-img img { width: 100%; max-height: 240px; object-fit: cover; }
 
@@ -1850,7 +1851,7 @@ body.is-previewing { padding-top: 52px; }
       <div class="form-row">
         <span class="label">封面图片</span>
         <div class="upload-zone ${d.image ? 'has-img' : ''}" id="img-zone">
-          ${d.image ? `<img src="${d.image}">` : '点击上传图片'}
+          ${d.image ? `<img src="${d.image}">` : '点击或拖动图片到此处上传'}
         </div>
         <input type="file" id="img-input" accept="image/*" style="display:none;">
       </div>
@@ -1866,15 +1867,39 @@ body.is-previewing { padding-top: 52px; }
     openModal(p ? '编辑项目' : '添加项目', body);
 
     let imageData = d.image || '';
-    $('img-zone').onclick = () => $('img-input').click();
-    $('img-input').onchange = e => {
-      const f = e.target.files[0]; if (!f) return;
+    const zone = $('img-zone');
+    const handleFile = f => {
+      if (!f) return;
+      if (!f.type.startsWith('image/')) return toast('请选择图片文件');
       compressImage(f, 1600, 0.85).then(url => {
         imageData = url;
-        $('img-zone').classList.add('has-img');
-        $('img-zone').innerHTML = `<img src="${imageData}">`;
+        zone.classList.remove('dragover');
+        zone.classList.add('has-img');
+        zone.innerHTML = `<img src="${imageData}">`;
       }).catch(() => toast('图片处理失败'));
     };
+
+    zone.onclick = () => $('img-input').click();
+    $('img-input').onchange = e => handleFile(e.target.files[0]);
+
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      zone.classList.add('dragover');
+    });
+    zone.addEventListener('dragleave', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+    });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      handleFile(e.dataTransfer.files[0]);
+    });
+
+    // 防止把图片拖到上传区以外时浏览器直接打开文件、丢失表单
+    const stop = e => e.preventDefault();
+    $('modal-bg').addEventListener('dragover', stop);
+    $('modal-bg').addEventListener('drop', stop);
 
     document.querySelectorAll('[data-modal-action]').forEach(el => {
       el.onclick = async () => {
