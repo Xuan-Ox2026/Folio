@@ -79,6 +79,12 @@ img { display: block; max-width: 100%; }
 .upload-zone.has-img { padding: 0; background: none; border: 1px solid #e3e3df; overflow: hidden; }
 .upload-zone.has-img img { width: 100%; max-height: 240px; object-fit: cover; }
 
+/* ── 拖动排序(仅管理员)── */
+[data-proj].reorderable { cursor: grab; }
+[data-proj].reorderable:active { cursor: grabbing; }
+[data-proj].dragging { opacity: 0.4; }
+[data-proj].drag-over { outline: 2px dashed currentColor; outline-offset: 3px; border-radius: 4px; }
+
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; }
 .btn-solid { background: #1a1a1a; color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; }
 .btn-solid:hover { background: #000; }
@@ -1772,11 +1778,121 @@ body.is-previewing { padding-top: 52px; }
       el.onclick = () => { state.filterTag = el.dataset.tag; renderTheme(); };
     });
     document.querySelectorAll('[data-proj]').forEach(el => {
-      el.onclick = () => openDetail(el.dataset.proj);
+      el.onclick = () => {
+        if (isDragging || Date.now() < dragSuppressClickUntil) return;  // 拖拽中/刚拖完,别误触详情
+        openDetail(el.dataset.proj);
+      };
     });
     document.querySelectorAll('[data-action]').forEach(el => {
       el.onclick = () => handleAction(el.dataset.action);
     });
+    attachDragHandlers();
+  }
+
+  /* ── 拖动排序 ── */
+  let dragSrcId = null;
+  let isDragging = false;
+  let dragSuppressClickUntil = 0;
+
+  function clearDragState() {
+    isDragging = false;
+    dragSrcId = null;
+    document.querySelectorAll('.drag-over').forEach(c => c.classList.remove('drag-over'));
+    document.querySelectorAll('.dragging').forEach(c => c.classList.remove('dragging'));
+  }
+
+  function attachDragHandlers() {
+    // 仅管理员、在作品列表、未按标签筛选时可排序(筛选子集排序含义不清)
+    if (!(state.isAdmin && state.tab === 'projects' && state.filterTag === 'all')) return;
+    const cards = [...document.querySelectorAll('[data-proj]')];
+    if (cards.length < 2) return;
+
+    cards.forEach(card => {
+      card.setAttribute('draggable', 'true');
+      card.classList.add('reorderable');
+      card.title = '拖动可调整顺序';
+      // 卡片内的图片默认可拖,会抢占卡片拖拽,关掉
+      card.querySelectorAll('img').forEach(im => { im.draggable = false; });
+
+      card.addEventListener('dragstart', e => {
+        dragSrcId = card.dataset.proj;
+        isDragging = true;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSrcId);  // Firefox 需要
+      });
+      card.addEventListener('dragend', clearDragState);   // 兜底清理
+      card.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (card.dataset.proj !== dragSrcId) card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetId = card.dataset.proj;
+        const srcId = dragSrcId;
+        // 核心清理放在 drop 里,不依赖随后的 dragend(下面 renderTheme 会重建 DOM)
+        dragSuppressClickUntil = Date.now() + 300;
+        clearDragState();
+        if (srcId && srcId !== targetId) reorderProjects(srcId, targetId);
+      });
+    });
+  }
+
+  function reorderProjects(srcId, targetId) {
+    const arr = state.projects;
+    const srcIdx = arr.findIndex(p => p.id === srcId);
+    const tgtIdx = arr.findIndex(p => p.id === targetId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+    const [moved] = arr.splice(srcIdx, 1);
+    const newTgt = arr.findIndex(p => p.id === targetId);
+    // 向下拖落在目标之后,向上拖落在目标之前
+    arr.splice(srcIdx < tgtIdx ? newTgt + 1 : newTgt, 0, moved);
+    renderTheme();
+    saveProjectOrder();
+  }
+
+  // 把视觉顺序写回 created_epoch(降序),无需新增数据库列。
+  // 单次批量 upsert(一个请求,整批成败一致);带保存锁,连续拖动时最后一次顺序生效。
+  let savingOrder = false;
+  let orderDirty  = false;
+
+  async function saveProjectOrder() {
+    if (!state.isAdmin || !state.user) return;
+    // 每次都基于当前完整顺序重算 epoch(降序)
+    const base = Date.now();
+    state.projects.forEach((p, i) => { p.created_epoch = base - i * 1000; });
+
+    if (savingOrder) { orderDirty = true; return; }  // 已有保存在飞,标记待补存
+    savingOrder = true;
+    let ok = false;
+    try {
+      // 只提交排序键:merge-upsert 只会更新 payload 里的列,不动 title/描述/图片等,
+      // 避免用本地可能过期的内容覆盖服务器较新数据。(只对已存在的行重排,不走插入)
+      const rows = state.projects.map(p => ({
+        id:            p.id,
+        user_id:       state.user.id,
+        created_epoch: p.created_epoch
+      }));
+      const { error } = await sb.from('projects').upsert(rows);
+      ok = !error;
+      if (error) {
+        toast('排序未保存,已恢复为服务器顺序,请重试');
+        const { data } = await sb.from('projects').select('*')
+          .eq('user_id', state.user.id)
+          .order('created_epoch', { ascending: false });
+        if (data) { state.projects = data; renderTheme(); }
+        orderDirty = false;  // 以服务器为准,放弃失败期间的拖动
+      }
+    } catch (e) {
+      toast('排序保存出错,请刷新页面');
+      orderDirty = false;
+    } finally {
+      savingOrder = false;  // 无论成败/抛错都释放锁,绝不卡死
+    }
+    if (ok && orderDirty) { orderDirty = false; saveProjectOrder(); }  // 期间又拖过,补存最新顺序
   }
 
   function handleAction(action) {
