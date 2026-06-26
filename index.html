@@ -1869,11 +1869,18 @@ body.is-previewing { padding-top: 52px; }
     savingOrder = true;
     let ok = false;
     try {
-      // 只提交排序键:merge-upsert 只会更新 payload 里的列,不动 title/描述/图片等,
-      // 避免用本地可能过期的内容覆盖服务器较新数据。(只对已存在的行重排,不走插入)
+      // 提交完整字段:upsert 底层是 INSERT...ON CONFLICT,projects 表 title 等列是
+      // NOT NULL,只发排序键会在插入阶段触发 NOT NULL 报错(ON CONFLICT 救不了)。
+      // 字段集与 persistProject 一致;单管理员场景下用本地当前数据覆盖无风险。
       const rows = state.projects.map(p => ({
         id:            p.id,
         user_id:       state.user.id,
+        title:         p.title,
+        description:   p.description || null,
+        tech:          p.tech        || null,
+        link:          p.link        || null,
+        tags:          p.tags        || [],
+        image:         p.image       || null,
         created_epoch: p.created_epoch
       }));
       const { error } = await sb.from('projects').upsert(rows);
