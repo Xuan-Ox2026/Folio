@@ -1129,14 +1129,21 @@ body.is-previewing { padding-top: 52px; }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // 只信任自家压缩出的 base64 图片:校验整串只含合法 base64 字符(前缀+正文都管),
-  // 防止 gallery 字段被注入像 `data:image/jpeg;base64," onerror=...` 这种能逃逸属性的值
+  // 图集图存 Supabase Storage,数据库只放 URL。只信任两种 src:
+  // ① 自家 Storage 桶的公共 URL  ② 历史遗留的自家 base64(向后兼容)
+  // 其余一律丢弃,防止 gallery 字段被注入恶意 URL/属性逃逸;渲染处再叠 esc()
   const SAFE_IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/i;
-  const safeImg = u => (typeof u === 'string' && SAFE_IMG.test(u)) ? u : '';
-  const MAX_GALLERY = 12;             // 单项目图集张数上限(base64 存库,控制行体量)
-  const PER_IMG_MAX = 2_600_000;      // 单图 base64 字符上限(约 1.9MB)
-  const GALLERY_TOTAL_MAX = 9_000_000;// 整个图集 base64 总量上限(约 6.5MB),封顶行体积
-  let editorSession = null;           // 当前编辑会话令牌;关闭/重开后旧异步任务凭此作废
+  const STORAGE_BUCKET = 'project-images';
+  const STORAGE_URL_PREFIX = SUPABASE_URL + '/storage/v1/object/public/' + STORAGE_BUCKET + '/';
+  const safeImg = u => {
+    if (typeof u !== 'string') return '';
+    if (u.startsWith(STORAGE_URL_PREFIX)) return u;  // Storage 公共 URL
+    if (SAFE_IMG.test(u)) return u;                   // 旧 base64
+    return '';
+  };
+  const MAX_GALLERY = 20;          // 单项目图集张数上限(图在 Storage,行里只放 URL)
+  const PER_IMG_MAX = 6_000_000;   // 单图压缩后体积上限(约 6MB 字节),纯兜底防超大文件
+  let editorSession = null;        // 当前编辑会话令牌;关闭/重开后旧异步任务凭此作废
 
   function toast(msg) {
     const el = document.createElement('div');
@@ -1287,9 +1294,12 @@ body.is-previewing { padding-top: 52px; }
 
   async function destroyProject(id) {
     if (!state.user) return false;
+    const proj = state.projects.find(x => x.id === id);
     const { error } = await sb.from('projects').delete()
       .eq('id', id).eq('user_id', state.user.id);
     if (error) { toast('删除失败'); return false; }
+    // 项目删了,连带把它图集的 Storage 文件清掉(best-effort)
+    if (proj) deleteGalleryImages((proj.gallery || []).map(g => g.path).filter(Boolean));
     return true;
   }
 
@@ -2011,7 +2021,7 @@ body.is-previewing { padding-top: 52px; }
            <div class="detail-gallery-title">项目图集</div>
            ${safeGallery.map(g => `
              <figure class="detail-gallery-item">
-               <img src="${esc(safeImg(g.url))}" alt="">
+               <img src="${esc(safeImg(g.url))}" alt="" loading="lazy">
                ${g.caption ? `<figcaption>${esc(g.caption)}</figcaption>` : ''}
              </figure>`).join('')}
          </div>`
@@ -2100,7 +2110,12 @@ body.is-previewing { padding-top: 52px; }
     // 载入时就过滤掉非法 src(防数据库里被塞入恶意 URL)
     const galleryData = (d.gallery || [])
       .filter(g => g && safeImg(g.url))
-      .map(g => ({ url: g.url, caption: g.caption || '' }));
+      .map(g => ({ url: g.url, caption: g.caption || '', path: g.path || '' }));
+    const removedPaths = [];          // 编辑中被删掉的图,保存成功后从 Storage 一并清理
+    const sessionUploadedPaths = [];  // 本次编辑新传上去的图;若没保存就关闭,关闭时清掉
+    let savedThisEdit = false;
+    // 关闭/取消编辑器时:没保存就把这次新传的孤儿图删掉
+    editorCleanup = () => { if (!savedThisEdit) deleteGalleryImages(sessionUploadedPaths); };
     function renderGalleryList() {
       const wrap = $('gallery-list');
       if (!wrap) return;  // 弹窗已关闭
@@ -2114,7 +2129,11 @@ body.is-previewing { padding-top: 52px; }
         inp.oninput = () => { galleryData[+inp.dataset.idx].caption = inp.value; };
       });
       wrap.querySelectorAll('.gallery-del').forEach(btn => {
-        btn.onclick = () => { galleryData.splice(+btn.dataset.idx, 1); renderGalleryList(); };
+        btn.onclick = () => {
+          const [g] = galleryData.splice(+btn.dataset.idx, 1);
+          if (g && g.path) removedPaths.push(g.path);  // 排队等保存成功后删 Storage 文件
+          renderGalleryList();
+        };
       });
     }
     renderGalleryList();
@@ -2128,17 +2147,26 @@ body.is-previewing { padding-top: 52px; }
       if (imgs.length > room) toast(`图集最多 ${MAX_GALLERY} 张,已添加前 ${room} 张`);
       toAdd.forEach(f => {
         pendingUploads++;
-        compressImage(f, 1600, 0.85)
-          .then(url => {
-            if (session !== editorSession) return;  // 编辑器已关闭/换项目,丢弃旧结果
-            if (url.length > PER_IMG_MAX) return toast('有张图太大,已跳过,换张小一点的');
-            if (galleryData.length >= MAX_GALLERY) return toast(`图集最多 ${MAX_GALLERY} 张`);
-            const total = galleryData.reduce((s, g) => s + g.url.length, 0);
-            if (total + url.length > GALLERY_TOTAL_MAX) return toast('图集总量已达上限,删掉几张或换小图');
-            galleryData.push({ url, caption: '' });
+        compressImageBlob(f, 1600, 0.85)
+          .then(blob => {
+            if (blob.size > PER_IMG_MAX) throw new Error('__toobig__');
+            return uploadGalleryImage(blob);   // 传到 Storage,拿回 {url, path}
+          })
+          .then(({ url, path }) => {
+            // 编辑器已关闭/换项目,或已满:刚传的图没人要了,删掉免得变孤儿文件
+            if (session !== editorSession || galleryData.length >= MAX_GALLERY) {
+              deleteGalleryImages([path]);
+              if (galleryData.length >= MAX_GALLERY) toast(`图集最多 ${MAX_GALLERY} 张`);
+              return;
+            }
+            galleryData.push({ url, caption: '', path });
+            sessionUploadedPaths.push(path);
             renderGalleryList();
           })
-          .catch(() => toast('图片处理失败'))
+          .catch(err => {
+            console.error('图集上传失败', err);
+            toast(err && err.message === '__toobig__' ? '有张图太大,已跳过' : '图片上传失败');
+          })
           .finally(() => { pendingUploads--; });
       });
     };
@@ -2180,6 +2208,8 @@ body.is-previewing { padding-top: 52px; }
           setBtnLoading(el, true);
           const ok = await persistProject(proj);
           if (!ok) { setBtnLoading(el, false); return; }  // 失败:恢复按钮,可重试
+          savedThisEdit = true;               // 已保存,关闭时不要再删这次传的图
+          deleteGalleryImages(removedPaths);  // best-effort 清理被删图的 Storage 文件
           const idx = state.projects.findIndex(x => x.id === proj.id);
           if (idx >= 0) state.projects[idx] = proj; else state.projects.unshift(proj);
           state.projects.sort((a, b) => (b.created_epoch || 0) - (a.created_epoch || 0));
@@ -2224,7 +2254,12 @@ body.is-previewing { padding-top: 52px; }
     });
   }
 
-  function closeModal() { editorSession = null; $('modal-container').innerHTML = ''; }
+  let editorCleanup = null;  // 编辑器关闭时跑的清理(如删未保存的孤儿图)
+  function closeModal() {
+    if (editorCleanup) { const fn = editorCleanup; editorCleanup = null; fn(); }
+    editorSession = null;
+    $('modal-container').innerHTML = '';
+  }
 
   /* ── IMAGE COMPRESSION ── */
   function compressImage(file, maxDim, q) {
@@ -2246,6 +2281,48 @@ body.is-previewing { padding-top: 52px; }
       };
       reader.onerror = rej; reader.readAsDataURL(file);
     });
+  }
+
+  // 压缩成 Blob(用于上传 Storage,不走 base64)
+  function compressImageBlob(file, maxDim, q) {
+    return new Promise((res, rej) => {
+      const img = new Image(), reader = new FileReader();
+      reader.onload = e => {
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = h * maxDim / w; w = maxDim; }
+            else { w = w * maxDim / h; h = maxDim; }
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          c.toBlob(b => b ? res(b) : rej(new Error('toBlob 失败')), 'image/jpeg', q);
+        };
+        img.onerror = rej; img.src = e.target.result;
+      };
+      reader.onerror = rej; reader.readAsDataURL(file);
+    });
+  }
+
+  // 上传一张图到 Storage,返回 { url, path }
+  async function uploadGalleryImage(blob) {
+    const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const { error } = await sb.storage.from(STORAGE_BUCKET)
+      .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw error;
+    const { data } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    return { url: data.publicUrl, path };
+  }
+
+  // 从 Storage 删除若干图(best-effort,失败不阻断主流程)
+  // 只删自己 user_id 文件夹下的,避免脏数据触发无意义/跨用户删除
+  async function deleteGalleryImages(paths) {
+    const prefix = state.user ? state.user.id + '/' : '\0';
+    const valid = (paths || []).filter(p => p && p.startsWith(prefix));
+    if (!valid.length) return;
+    try { await sb.storage.from(STORAGE_BUCKET).remove(valid); }
+    catch (e) { console.warn('删除图集文件失败', e); }
   }
 
   /* ── STYLE PICKER WIRING ── */
