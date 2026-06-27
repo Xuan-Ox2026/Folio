@@ -614,6 +614,30 @@ body[data-theme="warm"] .adminbar button:hover { color: #2e1f10; background: rgb
 }
 .warm-tools .add-btn:hover { background: #4a3624; }
 
+/* ── 标签筛选:默认单行,箭头展开/收起(4 套主题通用)── */
+.tag-bar { align-items: flex-start; flex-wrap: nowrap; }
+.tag-chips {
+  display: flex; flex-wrap: wrap; gap: var(--chip-gap, 0.7rem);
+  flex: 1 1 auto; min-width: 0; align-content: flex-start;
+  overflow: hidden; max-height: var(--tag-one-row, 2.4rem);
+}
+.tag-bar.tags-open .tag-chips { max-height: none; }
+.tag-toggle {
+  flex: none; align-self: flex-start;
+  width: 30px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid currentColor; border-radius: 6px; opacity: 0.5;
+  font-size: 11px; line-height: 1; cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.15s;
+}
+.tag-toggle:hover { opacity: 1; }
+.tag-bar.tags-open .tag-toggle { transform: rotate(180deg); }
+.tag-toggle.is-hidden { display: none; }
+.mag-tools    .tag-chips { --chip-gap: 1.5rem; }
+.studio-tools .tag-chips { --chip-gap: 0.7rem; }
+.gal-tools    .tag-chips { --chip-gap: 1.5rem; }
+.warm-tools   .tag-chips { --chip-gap: 0.6rem; }
+
 .warm-list { display: flex; flex-direction: column; gap: 1.2rem; padding-bottom: 4rem; }
 .warm-card {
   background: #faf3e7; border-radius: 14px; padding: 1.4rem;
@@ -1487,9 +1511,10 @@ body.is-previewing { padding-top: 52px; }
   function getSocials()     { return state.profile.social || []; }
 
   function getFilteredProjects() {
-    const tags = new Set();
-    state.projects.forEach(p => (p.tags || []).forEach(t => tags.add(t)));
-    const allTags  = [...tags];
+    // 按"该标签下的项目数量"降序排,数量并列时按名称稳定排序
+    const counts = {};
+    state.projects.forEach(p => (p.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
+    const allTags  = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, 'zh'));
     const filtered = state.filterTag === 'all'
       ? state.projects
       : state.projects.filter(p => (p.tags || []).includes(state.filterTag));
@@ -1511,10 +1536,13 @@ body.is-previewing { padding-top: 52px; }
         <span class="title">作品 / Works</span>
         <span class="line"></span>
       </div>
-      <div class="mag-tools">
+      <div class="mag-tools tag-bar">
         <span class="filter-label">分类:</span>
-        <span class="filter-chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</span>
-        ${allTags.map(t => `<span class="filter-chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`).join('')}
+        <div class="tag-chips">
+          <span class="filter-chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</span>
+          ${allTags.map(t => `<span class="filter-chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`).join('')}
+        </div>
+        <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ 新文章</button>' : ''}
       </div>
       ${filtered.length ? `
@@ -1584,9 +1612,12 @@ body.is-previewing { padding-top: 52px; }
         <span class="line"></span>
         <span class="count">${String(filtered.length).padStart(3, '0')} PROJECTS</span>
       </div>
-      <div class="studio-tools">
-        <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">ALL</button>
-        ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t).toUpperCase()}</button>`).join('')}
+      <div class="studio-tools tag-bar">
+        <div class="tag-chips">
+          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">ALL</button>
+          ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t).toUpperCase()}</button>`).join('')}
+        </div>
+        <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ NEW PROJECT</button>' : ''}
       </div>
       ${filtered.length ? `
@@ -1657,11 +1688,12 @@ body.is-previewing { padding-top: 52px; }
         <span class="title">— Selected Works</span>
         <span class="count">${String(filtered.length).padStart(2, '0')} / ${String(state.projects.length).padStart(2, '0')}</span>
       </div>
-      <div class="gal-tools">
-        <div class="chips">
+      <div class="gal-tools tag-bar">
+        <div class="tag-chips">
           <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">All</button>
           ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
         </div>
+        <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ add a piece</button>' : ''}
       </div>
       ${filtered.length ? `
@@ -1724,9 +1756,12 @@ body.is-previewing { padding-top: 52px; }
 
     const tabContent = state.tab === 'about' ? renderAboutPanel() : `
       <div class="warm-section"><span class="title">最近在做</span></div>
-      <div class="warm-tools">
-        <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</button>
-        ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
+      <div class="warm-tools tag-bar">
+        <div class="tag-chips">
+          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</button>
+          ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
+        </div>
+        <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ 新作品</button>' : ''}
       </div>
       ${filtered.length ? `
@@ -1847,6 +1882,23 @@ body.is-previewing { padding-top: 52px; }
       el.onclick = () => handleAction(el.dataset.action);
     });
     attachDragHandlers();
+    setupTagCollapse();
+  }
+
+  // 标签栏:钳到一行,内容超一行才显示展开箭头
+  function setupTagCollapse() {
+    const bar = document.querySelector('.tag-bar');
+    if (!bar) return;
+    const chips  = bar.querySelector('.tag-chips');
+    const toggle = bar.querySelector('.tag-toggle');
+    if (!chips || !toggle) return;
+    const first = chips.firstElementChild;
+    const rowH  = first ? first.offsetHeight : 28;
+    chips.style.setProperty('--tag-one-row', (rowH + 2) + 'px');
+    bar.classList.toggle('tags-open', !!state.tagsExpanded);
+    // scrollHeight 是完整内容高度(不受 max-height 影响),据此判断是否超过一行
+    const overflowing = chips.scrollHeight > rowH + 4;
+    toggle.classList.toggle('is-hidden', !overflowing);
   }
 
   /* ── 拖动排序 ── */
@@ -1964,6 +2016,11 @@ body.is-previewing { padding-top: 52px; }
 
   function handleAction(action) {
     if      (action === 'add')           openEditor(null);
+    else if (action === 'toggle-tags') {
+      state.tagsExpanded = !state.tagsExpanded;
+      const bar = document.querySelector('.tag-bar');
+      if (bar) bar.classList.toggle('tags-open', state.tagsExpanded);
+    }
     else if (action === 'save-about')    saveAbout();
     else if (action === 'upload-avatar') uploadAvatar();
     else if (action === 'remove-avatar') {
