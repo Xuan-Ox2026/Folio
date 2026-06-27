@@ -107,6 +107,17 @@ img { display: block; max-width: 100%; }
 .btn-danger { color: #c43d3d; border-color: #c43d3d; }
 .btn-danger:hover { background: #fef0f0; }
 
+/* ── 按钮加载态(保存转圈)── */
+button:disabled { opacity: 0.65; cursor: default; }
+button.is-loading { pointer-events: none; }
+.btn-spinner {
+  display: inline-block; width: 13px; height: 13px; margin-right: 7px;
+  vertical-align: -2px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  opacity: 0.9; animation: btn-spin 0.6s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+
 /* ===========================
    STYLE PICKER
    =========================== */
@@ -1134,6 +1145,21 @@ body.is-previewing { padding-top: 52px; }
     setTimeout(() => el.remove(), 2400);
   }
 
+  // 给按钮加/去"保存中…"转圈态;loading 时禁用并防重复点击
+  function setBtnLoading(btn, loading, text = '保存中…') {
+    if (!btn) return;
+    if (loading) {
+      if (btn.dataset.orig == null) btn.dataset.orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      btn.innerHTML = `<span class="btn-spinner"></span>${esc(text)}`;
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+      if (btn.dataset.orig != null) { btn.innerHTML = btn.dataset.orig; delete btn.dataset.orig; }
+    }
+  }
+
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     $(id).classList.add('active');
@@ -1940,6 +1966,8 @@ body.is-previewing { padding-top: 52px; }
   }
 
   async function saveAbout() {
+    const btn = document.querySelector('[data-action="save-about"]');
+    setBtnLoading(btn, true);
     state.profile.name    = $('about-name').value.trim();
     state.profile.tagline = $('about-tagline').value.trim();
     state.profile.bio     = $('about-bio').value.trim();
@@ -1948,12 +1976,9 @@ body.is-previewing { padding-top: 52px; }
       return parts[0] && parts[1] ? { name: parts[0], url: parts[1] } : null;
     }).filter(Boolean);
     const ok = await persistProfile();
-    renderTheme();
-    if (ok) {
-      toast('个人信息已保存 ✓');   // 醒目提示;重渲染会弹回顶部,旧的内联小字看不到
-      const s = $('save-status');
-      if (s) { s.textContent = '已保存 ✓'; setTimeout(() => s && (s.textContent = ''), 2000); }
-    }
+    if (!ok) { setBtnLoading(btn, false); return; }  // 失败:恢复按钮可重试(renderTheme 不重建,按钮还在)
+    renderTheme();  // 成功后重渲染会换掉按钮,无需手动复位
+    toast('个人信息已保存 ✓');
   }
 
   function uploadAvatar() {
@@ -2152,11 +2177,13 @@ body.is-previewing { padding-top: 52px; }
             gallery:       galleryData,
             created_epoch: existing?.created_epoch || Date.now()
           };
+          setBtnLoading(el, true);
           const ok = await persistProject(proj);
-          if (!ok) return;
+          if (!ok) { setBtnLoading(el, false); return; }  // 失败:恢复按钮,可重试
           const idx = state.projects.findIndex(x => x.id === proj.id);
           if (idx >= 0) state.projects[idx] = proj; else state.projects.unshift(proj);
           state.projects.sort((a, b) => (b.created_epoch || 0) - (a.created_epoch || 0));
+          toast('已保存 ✓');
           closeModal(); renderTheme();
         }
       };
