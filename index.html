@@ -91,6 +91,11 @@ img { display: block; max-width: 100%; }
 .gallery-edit-item img { width: 64px; height: 64px; object-fit: contain; background: #f3f3f0; border-radius: 6px; border: 1px solid #e3e3df; flex: none; }
 .gallery-edit-item input { flex: 1; min-width: 0; }
 .gallery-edit-item .gallery-del { padding: 7px 12px; font-size: 13px; flex: none; }
+.gallery-drag { flex: none; cursor: grab; color: #bbb; font-size: 18px; line-height: 1; padding: 0 2px; user-select: none; }
+.gallery-drag:hover { color: #777; }
+.gallery-drag:active { cursor: grabbing; }
+.gallery-edit-item.dragging { opacity: 0.45; }
+.gallery-edit-item.drag-over { outline: 2px dashed #999; outline-offset: 2px; border-radius: 6px; }
 
 /* ── 详情:项目图集 ── */
 .detail-gallery { margin: 1.4rem 0; }
@@ -2171,14 +2176,16 @@ body.is-previewing { padding-top: 52px; }
     const removedPaths = [];          // 编辑中被删掉的图,保存成功后从 Storage 一并清理
     const sessionUploadedPaths = [];  // 本次编辑新传上去的图;若没保存就关闭,关闭时清掉
     let savedThisEdit = false;
+    let galleryDragFrom = null;       // 图集拖动排序的源下标
     // 关闭/取消编辑器时:没保存就把这次新传的孤儿图删掉
     editorCleanup = () => { if (!savedThisEdit) deleteGalleryImages(sessionUploadedPaths); };
     function renderGalleryList() {
       const wrap = $('gallery-list');
       if (!wrap) return;  // 弹窗已关闭
       wrap.innerHTML = galleryData.map((g, i) => `
-        <div class="gallery-edit-item">
-          <img src="${esc(safeImg(g.url))}" alt="">
+        <div class="gallery-edit-item" data-grow="${i}">
+          <span class="gallery-drag" draggable="true" title="拖动排序" aria-label="拖动排序">⠿</span>
+          <img src="${esc(safeImg(g.url))}" alt="" draggable="false">
           <input type="text" class="gallery-cap" data-idx="${i}" value="${esc(g.caption)}" placeholder="这张图是什么?写个说明">
           <button type="button" class="btn-line btn-danger gallery-del" data-idx="${i}">删除</button>
         </div>`).join('');
@@ -2191,6 +2198,40 @@ body.is-previewing { padding-top: 52px; }
           if (g && g.path) removedPaths.push(g.path);  // 排队等保存成功后删 Storage 文件
           renderGalleryList();
         };
+      });
+      // 拖动排序:只有抓手(⠿)可拖,整行是落点,这样说明输入框照常可编辑
+      wrap.querySelectorAll('.gallery-edit-item').forEach(row => {
+        const handle = row.querySelector('.gallery-drag');
+        handle.addEventListener('dragstart', e => {
+          galleryDragFrom = +row.dataset.grow;
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(galleryDragFrom));  // Firefox 需要
+          if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(row, 20, 20);
+        });
+        handle.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          wrap.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+          galleryDragFrom = null;
+        });
+        row.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (galleryDragFrom !== null && +row.dataset.grow !== galleryDragFrom) row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', e => {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          const from = galleryDragFrom, to = +row.dataset.grow;
+          galleryDragFrom = null;
+          if (from === null || isNaN(from) || from === to) return;
+          const moved = galleryData[from], target = galleryData[to];
+          galleryData.splice(from, 1);
+          const newTgt = galleryData.indexOf(target);
+          galleryData.splice(from < to ? newTgt + 1 : newTgt, 0, moved);  // 下拖落目标后,上拖落目标前
+          renderGalleryList();
+        });
       });
     }
     renderGalleryList();
