@@ -1255,7 +1255,7 @@ body.is-previewing { padding-top: 52px; }
       gallery:       proj.gallery       || [],
       created_epoch: proj.created_epoch || Date.now()
     });
-    if (error) { toast('保存失败'); return false; }
+    if (error) { console.error('persistProject 失败:', error); toast('保存失败: ' + (error.message || error.code || '未知错误')); return false; }
     return true;
   }
 
