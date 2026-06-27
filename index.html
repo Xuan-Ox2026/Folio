@@ -1950,6 +1950,7 @@ body.is-previewing { padding-top: 52px; }
     const ok = await persistProfile();
     renderTheme();
     if (ok) {
+      toast('个人信息已保存 ✓');   // 醒目提示;重渲染会弹回顶部,旧的内联小字看不到
       const s = $('save-status');
       if (s) { s.textContent = '已保存 ✓'; setTimeout(() => s && (s.textContent = ''), 2000); }
     }
