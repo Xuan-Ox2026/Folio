@@ -85,6 +85,20 @@ img { display: block; max-width: 100%; }
 [data-proj].dragging { opacity: 0.4; }
 [data-proj].drag-over { outline: 2px dashed currentColor; outline-offset: 3px; border-radius: 4px; }
 
+/* ── 编辑器:项目图集 ── */
+.gallery-edit { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.gallery-edit-item { display: flex; gap: 10px; align-items: center; }
+.gallery-edit-item img { width: 64px; height: 64px; object-fit: contain; background: #f3f3f0; border-radius: 6px; border: 1px solid #e3e3df; flex: none; }
+.gallery-edit-item input { flex: 1; min-width: 0; }
+.gallery-edit-item .gallery-del { padding: 7px 12px; font-size: 13px; flex: none; }
+
+/* ── 详情:项目图集 ── */
+.detail-gallery { margin: 1.4rem 0; }
+.detail-gallery-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 0.9rem; }
+.detail-gallery-item { margin: 0 0 1.3rem; }
+.detail-gallery-item img { width: 100%; max-height: 70vh; object-fit: contain; background: #f3f3f0; border-radius: 6px; display: block; }
+.detail-gallery-item figcaption { font-size: 13px; color: #666; margin-top: 0.5rem; line-height: 1.55; }
+
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; }
 .btn-solid { background: #1a1a1a; color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; }
 .btn-solid:hover { background: #000; }
@@ -1104,6 +1118,15 @@ body.is-previewing { padding-top: 52px; }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // 只信任自家压缩出的 base64 图片:校验整串只含合法 base64 字符(前缀+正文都管),
+  // 防止 gallery 字段被注入像 `data:image/jpeg;base64," onerror=...` 这种能逃逸属性的值
+  const SAFE_IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/i;
+  const safeImg = u => (typeof u === 'string' && SAFE_IMG.test(u)) ? u : '';
+  const MAX_GALLERY = 12;             // 单项目图集张数上限(base64 存库,控制行体量)
+  const PER_IMG_MAX = 2_600_000;      // 单图 base64 字符上限(约 1.9MB)
+  const GALLERY_TOTAL_MAX = 9_000_000;// 整个图集 base64 总量上限(约 6.5MB),封顶行体积
+  let editorSession = null;           // 当前编辑会话令牌;关闭/重开后旧异步任务凭此作废
+
   function toast(msg) {
     const el = document.createElement('div');
     el.className = 'toast'; el.textContent = msg;
@@ -1229,6 +1252,7 @@ body.is-previewing { padding-top: 52px; }
       link:          proj.link          || null,
       tags:          proj.tags          || [],
       image:         proj.image         || null,
+      gallery:       proj.gallery       || [],
       created_epoch: proj.created_epoch || Date.now()
     });
     if (error) { toast('保存失败'); return false; }
@@ -1955,6 +1979,17 @@ body.is-previewing { padding-top: 52px; }
       : '';
     const techHtml = p.tech ? `<div style="font-size:13px;margin:1rem 0;color:#777;"><strong style="color:#333;">技术 / 工具:</strong> ${esc(p.tech)}</div>` : '';
     const linkHtml = p.link ? `<div style="margin:1rem 0;"><a href="${esc(p.link)}" target="_blank" rel="noopener" style="color:#185fa5;">→ ${esc(p.link)}</a></div>` : '';
+    const safeGallery = (p.gallery || []).filter(g => safeImg(g.url));
+    const galleryHtml = safeGallery.length
+      ? `<div class="detail-gallery">
+           <div class="detail-gallery-title">项目图集</div>
+           ${safeGallery.map(g => `
+             <figure class="detail-gallery-item">
+               <img src="${esc(safeImg(g.url))}" alt="">
+               ${g.caption ? `<figcaption>${esc(g.caption)}</figcaption>` : ''}
+             </figure>`).join('')}
+         </div>`
+      : '';
     const adminActions = state.isAdmin
       ? `<div class="modal-actions">
           <button class="btn-line btn-danger" data-modal-action="delete:${p.id}">删除</button>
@@ -1964,12 +1999,12 @@ body.is-previewing { padding-top: 52px; }
     openModal(p.title,
       imgHtml + tagHtml +
       `<p style="line-height:1.7;white-space:pre-wrap;color:#333;">${esc(p.description || '(没有描述)')}</p>` +
-      techHtml + linkHtml + adminActions);
+      techHtml + linkHtml + galleryHtml + adminActions);
   }
 
   function openEditor(p) {
     state.editingId = p ? p.id : null;
-    const d = p || { title: '', description: '', tags: [], tech: '', link: '', image: '' };
+    const d = p || { title: '', description: '', tags: [], tech: '', link: '', image: '', gallery: [] };
     const body = `
       <div class="form-row">
         <span class="label">封面图片</span>
@@ -1977,6 +2012,12 @@ body.is-previewing { padding-top: 52px; }
           ${d.image ? `<img src="${d.image}">` : '点击或拖动图片到此处上传'}
         </div>
         <input type="file" id="img-input" accept="image/*" style="display:none;">
+      </div>
+      <div class="form-row">
+        <span class="label">项目图集(可选 · 多张图,每张可写说明 · 最多 ${MAX_GALLERY} 张)</span>
+        <div id="gallery-list" class="gallery-edit"></div>
+        <div class="upload-zone" id="gallery-add" style="padding:1rem;">+ 点击或拖动添加图片到图集</div>
+        <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;">
       </div>
       <div class="form-row"><span class="label">标题 *</span><input type="text" id="p-title" value="${esc(d.title)}"></div>
       <div class="form-row"><span class="label">描述</span><textarea id="p-desc" rows="4">${esc(d.description)}</textarea></div>
@@ -1989,17 +2030,22 @@ body.is-previewing { padding-top: 52px; }
       </div>`;
     openModal(p ? '编辑项目' : '添加项目', body);
 
+    const session = editorSession = {};  // 本次编辑会话令牌
     let imageData = d.image || '';
+    let pendingUploads = 0;  // 正在压缩中的图片数;保存前必须为 0,否则会漏存
     const zone = $('img-zone');
     const handleFile = f => {
       if (!f) return;
       if (!f.type.startsWith('image/')) return toast('请选择图片文件');
+      pendingUploads++;
       compressImage(f, 1600, 0.85).then(url => {
+        if (session !== editorSession) return;  // 编辑器已关闭/换项目,丢弃旧结果
+        if (url.length > PER_IMG_MAX) return toast('封面图太大,换张小一点的');
         imageData = url;
         zone.classList.remove('dragover');
         zone.classList.add('has-img');
-        zone.innerHTML = `<img src="${imageData}">`;
-      }).catch(() => toast('图片处理失败'));
+        zone.innerHTML = `<img src="${esc(imageData)}">`;
+      }).catch(() => toast('图片处理失败')).finally(() => { pendingUploads--; });
     };
 
     zone.onclick = () => $('img-input').click();
@@ -2024,6 +2070,61 @@ body.is-previewing { padding-top: 52px; }
     $('modal-bg').addEventListener('dragover', stop);
     $('modal-bg').addEventListener('drop', stop);
 
+    /* ── 项目图集(多图 + 说明)── */
+    // 载入时就过滤掉非法 src(防数据库里被塞入恶意 URL)
+    const galleryData = (d.gallery || [])
+      .filter(g => g && safeImg(g.url))
+      .map(g => ({ url: g.url, caption: g.caption || '' }));
+    function renderGalleryList() {
+      const wrap = $('gallery-list');
+      if (!wrap) return;  // 弹窗已关闭
+      wrap.innerHTML = galleryData.map((g, i) => `
+        <div class="gallery-edit-item">
+          <img src="${esc(safeImg(g.url))}" alt="">
+          <input type="text" class="gallery-cap" data-idx="${i}" value="${esc(g.caption)}" placeholder="这张图是什么?写个说明">
+          <button type="button" class="btn-line btn-danger gallery-del" data-idx="${i}">删除</button>
+        </div>`).join('');
+      wrap.querySelectorAll('.gallery-cap').forEach(inp => {
+        inp.oninput = () => { galleryData[+inp.dataset.idx].caption = inp.value; };
+      });
+      wrap.querySelectorAll('.gallery-del').forEach(btn => {
+        btn.onclick = () => { galleryData.splice(+btn.dataset.idx, 1); renderGalleryList(); };
+      });
+    }
+    renderGalleryList();
+
+    const addZone = $('gallery-add');
+    const addGalleryFiles = files => {
+      const imgs = [...files].filter(f => f.type.startsWith('image/'));
+      const room = MAX_GALLERY - galleryData.length;
+      if (room <= 0) { toast(`图集最多 ${MAX_GALLERY} 张`); return; }
+      const toAdd = imgs.slice(0, room);
+      if (imgs.length > room) toast(`图集最多 ${MAX_GALLERY} 张,已添加前 ${room} 张`);
+      toAdd.forEach(f => {
+        pendingUploads++;
+        compressImage(f, 1600, 0.85)
+          .then(url => {
+            if (session !== editorSession) return;  // 编辑器已关闭/换项目,丢弃旧结果
+            if (url.length > PER_IMG_MAX) return toast('有张图太大,已跳过,换张小一点的');
+            if (galleryData.length >= MAX_GALLERY) return toast(`图集最多 ${MAX_GALLERY} 张`);
+            const total = galleryData.reduce((s, g) => s + g.url.length, 0);
+            if (total + url.length > GALLERY_TOTAL_MAX) return toast('图集总量已达上限,删掉几张或换小图');
+            galleryData.push({ url, caption: '' });
+            renderGalleryList();
+          })
+          .catch(() => toast('图片处理失败'))
+          .finally(() => { pendingUploads--; });
+      });
+    };
+    addZone.onclick = () => $('gallery-input').click();
+    $('gallery-input').onchange = e => { addGalleryFiles(e.target.files); e.target.value = ''; };
+    addZone.addEventListener('dragover', e => { e.preventDefault(); addZone.classList.add('dragover'); });
+    addZone.addEventListener('dragleave', e => { e.preventDefault(); addZone.classList.remove('dragover'); });
+    addZone.addEventListener('drop', e => {
+      e.preventDefault(); addZone.classList.remove('dragover');
+      addGalleryFiles(e.dataTransfer.files);
+    });
+
     document.querySelectorAll('[data-modal-action]').forEach(el => {
       el.onclick = async () => {
         const a = el.dataset.modalAction;
@@ -2031,6 +2132,11 @@ body.is-previewing { padding-top: 52px; }
         if (a === 'save-proj') {
           const title = $('p-title').value.trim();
           if (!title) return toast('请输入标题');
+          if (pendingUploads > 0) return toast('图片还在处理中,请稍候再保存');
+          // 兜底:把当前图集说明输入框的最新值同步回数据
+          $('gallery-list').querySelectorAll('.gallery-cap').forEach(inp => {
+            galleryData[+inp.dataset.idx].caption = inp.value;
+          });
           const existing = state.editingId
             ? state.projects.find(x => x.id === state.editingId)
             : null;
@@ -2042,6 +2148,7 @@ body.is-previewing { padding-top: 52px; }
             link:          $('p-link').value.trim(),
             tags:          $('p-tags').value.split(',').map(s => s.trim()).filter(Boolean),
             image:         imageData,
+            gallery:       galleryData,
             created_epoch: existing?.created_epoch || Date.now()
           };
           const ok = await persistProject(proj);
@@ -2089,7 +2196,7 @@ body.is-previewing { padding-top: 52px; }
     });
   }
 
-  function closeModal() { $('modal-container').innerHTML = ''; }
+  function closeModal() { editorSession = null; $('modal-container').innerHTML = ''; }
 
   /* ── IMAGE COMPRESSION ── */
   function compressImage(file, maxDim, q) {
