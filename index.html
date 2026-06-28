@@ -406,53 +406,38 @@ body[data-theme="studio"] .adminbar button:hover { color: #f4e409; }
 }
 .studio-tools .add-btn:hover { background: #fff; }
 
-.studio-grid {
-  display: grid; grid-template-columns: repeat(12, 1fr);
-  gap: 16px; padding-bottom: 6rem;
+/* ── 作品关系网(星座力导向图)── */
+.studio-constel {
+  position: relative; width: 100%; height: clamp(440px, 64vh, 680px);
+  margin-bottom: 1rem; border: 1px solid #1c1c1c; border-radius: 10px; overflow: hidden;
+  background:
+    radial-gradient(1100px 560px at 50% 42%, rgba(244,228,9,0.05), transparent 62%),
+    #0b0b0b;
 }
-.studio-card {
-  background: #1a1a1a; cursor: pointer; overflow: hidden;
-  transition: transform 0.3s ease;
-  position: relative;
-  border: 1px solid #222;
-}
-.studio-card:nth-child(7n+1) { grid-column: span 7; }
-.studio-card:nth-child(7n+2) { grid-column: span 5; }
-.studio-card:nth-child(7n+3) { grid-column: span 4; }
-.studio-card:nth-child(7n+4) { grid-column: span 4; }
-.studio-card:nth-child(7n+5) { grid-column: span 4; }
-.studio-card:nth-child(7n+6) { grid-column: span 6; }
-.studio-card:nth-child(7n+7) { grid-column: span 6; }
-.studio-card:hover { border-color: #f4e409; }
-.studio-card:hover .studio-card-img img { transform: scale(1.04); }
+.studio-constel svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.studio-constel-hint { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; letter-spacing: 0.06em; padding-bottom: 5rem; }
 
-.studio-card-img { aspect-ratio: 16/10; background: #2a2a2a; overflow: hidden; position: relative; }
-.studio-card-img img { width: 100%; height: 100%; object-fit: contain; transition: transform 0.4s ease; }
-.studio-card-img.empty { display: flex; align-items: center; justify-content: center; }
-.studio-card-img.empty .placeholder { width: 60px; height: 60px; border: 2px solid #f4e409; transform: rotate(45deg); }
-.studio-card-body { padding: 18px 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
-.studio-card-body .left h3 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; line-height: 1.1; letter-spacing: -0.02em; color: #f0f0ec; margin-bottom: 4px; }
-.studio-card-body .left .cat { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #f4e409; letter-spacing: 0.15em; text-transform: uppercase; }
-.studio-card-body .arrow { font-family: 'Space Grotesk', sans-serif; font-size: 22px; color: #777; transition: transform 0.2s ease; }
-.studio-card:hover .studio-card-body .arrow { color: #f4e409; transform: translate(4px, -4px); }
+.sc-edge { stroke: #2c2c2c; stroke-width: 1; }
+.sc-edge.tag { stroke: #242424; stroke-dasharray: 2 4; }
+.sc-edge.hot { stroke: #f4e409; stroke-width: 1.5; stroke-dasharray: none; opacity: 0.85; }
 
-/* 特色置顶大卡 + 紧凑自适应网格 */
-.studio-featured { display: grid; grid-template-columns: 1.45fr 1fr; margin-bottom: 16px; }
-.studio-featured .studio-card-img { aspect-ratio: auto; min-height: 340px; }
-.studio-featured-body { padding: 34px 32px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
-.studio-featured-body .cat { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #f4e409; letter-spacing: 0.2em; text-transform: uppercase; }
-.studio-featured-body h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: clamp(26px, 3vw, 42px); line-height: 1.04; letter-spacing: -0.02em; color: #f0f0ec; }
-.studio-featured-body p { font-size: 14px; line-height: 1.65; color: #9a9a96; }
-.studio-featured-body .arrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #777; letter-spacing: 0.15em; margin-top: 4px; transition: color 0.2s ease; }
-.studio-featured:hover .arrow { color: #f4e409; }
-.studio-grid-simple  { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-
-/* 其余项目(方案B):特色大卡之外全部进等大三列卡片网格,统一、视觉饱满,项目再多都整齐 */
-.studio-grid-rest { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; padding-bottom: 6rem; }
-/* 重置 .studio-card 的不对称跨列(7n 规则)与移动端 .studio-card[class]{span 12},让本网格里卡片始终等大、跟随列数 */
-.studio-grid-rest > .studio-card[class] { grid-column: auto / auto; }
-@media (max-width: 1000px) { .studio-grid-rest { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px)  { .studio-grid-rest { grid-template-columns: 1fr; } }
+.sc-node { cursor: grab; }
+.sc-node:active { cursor: grabbing; }
+.sc-node .disc { fill: #1a1a1a; stroke: #333; stroke-width: 1.5; transition: stroke 0.15s; }
+.sc-node .pic { clip-path: circle(50%); }
+.sc-node .ph { fill: none; stroke: #f4e409; stroke-width: 1.5; opacity: 0.5; }
+.sc-node .ring { fill: none; stroke: #f4e409; stroke-width: 1.5; opacity: 0; transition: opacity 0.15s; }
+.sc-node:hover .disc { stroke: #f4e409; }
+.sc-node:hover .ring { opacity: 0.5; }
+.sc-node .label { font-family: 'Space Grotesk', 'Noto Serif SC', sans-serif; font-size: 13px; font-weight: 600; fill: #cfcfca; text-anchor: middle; paint-order: stroke; stroke: #0b0b0b; stroke-width: 4px; stroke-linejoin: round; }
+.sc-node:hover .label { fill: #fff; }
+.sc-node .cat { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: #f4e409; letter-spacing: 0.12em; text-anchor: middle; paint-order: stroke; stroke: #0b0b0b; stroke-width: 3px; }
+/* 中心(你) */
+.sc-node.center { cursor: default; }
+.sc-node.center .disc { fill: #141414; stroke: #f4e409; stroke-width: 2; }
+.sc-node.center .name { font-family: 'Space Grotesk', 'Noto Serif SC', sans-serif; font-weight: 700; font-size: 17px; fill: #f0f0ec; text-anchor: middle; }
+.sc-node.center .name.below { font-size: 13px; paint-order: stroke; stroke: #0b0b0b; stroke-width: 4px; stroke-linejoin: round; }
+.sc-node.center .sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: #888; letter-spacing: 0.2em; text-anchor: middle; }
 
 .studio-empty { text-align: center; padding: 6rem 1rem; color: #777; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
 
@@ -467,9 +452,9 @@ body[data-theme="studio"] .adminbar button:hover { color: #f4e409; }
   .studio-hero { grid-template-columns: 1fr; padding: 2rem 0 3rem; gap: 2rem; }
   .studio-hero .right { align-items: flex-start; }
   .studio-hero h1 { font-size: 60px; }
-  .studio-card[class] { grid-column: span 12; }
-  .studio-featured { grid-template-columns: 1fr; }
-  .studio-featured .studio-card-img { min-height: 220px; }
+  .studio-constel { height: clamp(380px, 72vh, 540px); }
+  .sc-node .label { font-size: 11px; }
+  .sc-node .cat { font-size: 8px; }
 }
 
 /* ============================================================
@@ -1538,6 +1523,8 @@ body.is-previewing { padding-top: 52px; }
 
   /* ── RENDER DISPATCH ── */
   function renderTheme() {
+    // 离开 studio(渲染其它主题)时,拆掉星图的 rAF 与 resize 监听,避免泄漏
+    if (state.theme !== 'studio') teardownStudioConstellation();
     if      (state.theme === 'mag')     renderMag();
     else if (state.theme === 'studio')  renderStudio();
     else if (state.theme === 'gallery') renderGallery();
@@ -1674,42 +1661,9 @@ body.is-previewing { padding-top: 52px; }
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ NEW PROJECT</button>' : ''}
       </div>
-      ${filtered.length ? (() => {
-        const card = (p, n) => `
-          <div class="studio-card" data-proj="${p.id}">
-            <div class="studio-card-img ${p.image ? '' : 'empty'}">
-              ${p.image ? `<img src="${esc(safeImg(p.image))}" alt="">` : '<div class="placeholder"></div>'}
-            </div>
-            <div class="studio-card-body">
-              <div class="left">
-                <h3>${esc(p.title)}</h3>
-                <div class="cat">${String(n).padStart(2, '0')} / ${esc((p.tags || [])[0] || 'WORK')}</div>
-              </div>
-              <div class="arrow">↗</div>
-            </div>
-          </div>`;
-        // 筛选某标签 或 项目很少:简单统一网格,不做策展
-        if (!(state.filterTag === 'all' && filtered.length >= 3)) {
-          return `<div class="studio-grid studio-grid-simple">${filtered.map((p, i) => card(p, i + 1)).join('')}</div>`;
-        }
-        // 特色置顶大卡 + 其余全部进「等大三列卡片网格」(方案B):统一、视觉饱满,项目再多都整齐
-        const featured = filtered[0];
-        const rest     = filtered.slice(1);
-        const featuredHtml = `
-          <div class="studio-card studio-featured" data-proj="${featured.id}">
-            <div class="studio-card-img ${featured.image ? '' : 'empty'}">
-              ${featured.image ? `<img src="${esc(safeImg(featured.image))}" alt="">` : '<div class="placeholder"></div>'}
-            </div>
-            <div class="studio-featured-body">
-              <div class="cat">FEATURED / ${esc((featured.tags || [])[0] || 'WORK')}</div>
-              <h2>${esc(featured.title)}</h2>
-              ${featured.description ? `<p>${esc((featured.description || '').slice(0, 110))}${(featured.description || '').length > 110 ? '…' : ''}</p>` : ''}
-              <div class="arrow">VIEW PROJECT ↗</div>
-            </div>
-          </div>`;
-        return featuredHtml
-          + (rest.length ? `<div class="studio-grid-rest">${rest.map((p, i) => card(p, i + 2)).join('')}</div>` : '');
-      })() : '<div class="studio-empty">— EMPTY / ADD YOUR FIRST PROJECT —</div>'}
+      ${filtered.length
+        ? '<div class="studio-constel" id="studio-constel" aria-label="作品关系网"></div><div class="studio-constel-hint">— 拖动节点 · 点节点看详情 · 悬停高亮它的连线</div>'
+        : '<div class="studio-empty">— EMPTY / ADD YOUR FIRST PROJECT —</div>'}
     `;
 
     root.innerHTML = `
@@ -1745,6 +1699,203 @@ body.is-previewing { padding-top: 52px; }
         </div>
       </div>
     `;
+
+    if (state.tab === 'projects' && filtered.length) initStudioConstellation(filtered);
+    else teardownStudioConstellation();
+  }
+
+  /* ── STUDIO: 作品关系网(星座力导向图) ── */
+  let studioConstel = null;
+  function teardownStudioConstellation() {
+    if (!studioConstel) return;
+    cancelAnimationFrame(studioConstel.raf);
+    window.removeEventListener('resize', studioConstel.onResize);
+    studioConstel = null;
+  }
+  function initStudioConstellation(projects) {
+    teardownStudioConstellation();
+    const stage = document.getElementById('studio-constel');
+    if (!stage) return;
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(SVGNS, 'svg');
+    stage.innerHTML = '';
+    stage.appendChild(svg);
+
+    let W = stage.clientWidth || 900;
+    let H = stage.clientHeight || 560;
+    let cx = W / 2, cy = H / 2;
+    const minDim = () => Math.min(W, H);
+
+    // ── 节点:中心(你) + 每个项目 ──
+    const center = { id: '__center', center: true, x: cx, y: cy, vx: 0, vy: 0, r: 40, fx: cx, fy: cy };
+    const nodes = [center];
+    const N = projects.length;
+    projects.forEach((p, i) => {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const R = minDim() * 0.34;
+      nodes.push({
+        id: p.id, p, r: 26,
+        x: cx + Math.cos(a) * R + (Math.random() - 0.5) * 30,
+        y: cy + Math.sin(a) * R + (Math.random() - 0.5) * 30,
+        vx: 0, vy: 0
+      });
+    });
+    const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+    // ── 边:中心→每个项目;同标签项目互连 ──
+    const links = [];
+    projects.forEach(p => links.push({ s: center, t: byId[p.id], dist: minDim() * 0.30, k: 0.03, tag: false }));
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      const A = projects[i], B = projects[j];
+      const at = A.tags || [], bt = B.tags || [];
+      if (at.some(t => bt.includes(t))) links.push({ s: byId[A.id], t: byId[B.id], dist: 150, k: 0.012, tag: true });
+    }
+    // 记录每个节点关联的边,供 hover 高亮
+    nodes.forEach(n => n.edges = []);
+    links.forEach(l => { l.s.edges.push(l); l.t.edges.push(l); });
+
+    // ── 力模拟一步 ──
+    function step() {
+      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y; let d2 = dx * dx + dy * dy || 0.01; let d = Math.sqrt(d2);
+        const min = a.r + b.r + 24;
+        let rep = 5200 / d2;
+        if (d < min) rep += (min - d) * 0.18;
+        const fx = (dx / d) * rep, fy = (dy / d) * rep;
+        if (a.fx == null) { a.vx -= fx; a.vy -= fy; }
+        if (b.fx == null) { b.vx += fx; b.vy += fy; }
+      }
+      for (const l of links) {
+        let dx = l.t.x - l.s.x, dy = l.t.y - l.s.y; let d = Math.hypot(dx, dy) || 0.01;
+        const f = (d - l.dist) * l.k; const fx = (dx / d) * f, fy = (dy / d) * f;
+        if (l.s.fx == null) { l.s.vx += fx; l.s.vy += fy; }
+        if (l.t.fx == null) { l.t.vx -= fx; l.t.vy -= fy; }
+      }
+      for (const n of nodes) {
+        if (n.fx != null) { n.x = n.fx; n.y = n.fy; n.vx = n.vy = 0; continue; }
+        n.vx += (cx - n.x) * 0.0012; n.vy += (cy - n.y) * 0.0012;
+        n.vx *= 0.86; n.vy *= 0.86; n.x += n.vx; n.y += n.vy;
+        n.x = Math.max(n.r + 6, Math.min(W - n.r - 6, n.x));
+        n.y = Math.max(n.r + 24, Math.min(H - n.r - 30, n.y));
+      }
+    }
+
+    // ── 建 DOM(SVG createElementNS + textContent,user 数据不进 innerHTML) ──
+    links.forEach(l => {
+      const e = document.createElementNS(SVGNS, 'line');
+      e.setAttribute('class', 'sc-edge' + (l.tag ? ' tag' : ''));
+      l.el = e; svg.appendChild(e);
+    });
+    function svgText(cls, y, txt) {
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('class', cls); t.setAttribute('y', y); t.textContent = txt;
+      return t;
+    }
+    nodes.forEach(n => {
+      const g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('class', 'sc-node' + (n.center ? ' center' : ''));
+      const disc = document.createElementNS(SVGNS, 'circle');
+      disc.setAttribute('class', 'disc'); disc.setAttribute('r', n.r);
+      g.appendChild(disc);
+      if (n.center) {
+        const av = safeImg(state.profile.avatar);
+        if (av) {
+          const im = document.createElementNS(SVGNS, 'image');
+          im.setAttribute('class', 'pic'); im.setAttribute('href', av);
+          im.setAttribute('x', -n.r); im.setAttribute('y', -n.r);
+          im.setAttribute('width', n.r * 2); im.setAttribute('height', n.r * 2);
+          im.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+          g.appendChild(im);
+          g.appendChild(svgText('name below', n.r + 18, getDisplayName()));
+        } else {
+          g.appendChild(svgText('name', -1, (getDisplayName() || '我')));
+          g.appendChild(svgText('sub', 14, 'PORTFOLIO'));
+        }
+      } else {
+        const img = safeImg(n.p.image);
+        if (img) {
+          const im = document.createElementNS(SVGNS, 'image');
+          im.setAttribute('class', 'pic'); im.setAttribute('href', img);
+          im.setAttribute('x', -n.r); im.setAttribute('y', -n.r);
+          im.setAttribute('width', n.r * 2); im.setAttribute('height', n.r * 2);
+          im.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+          g.appendChild(im);
+        } else {
+          const ph = document.createElementNS(SVGNS, 'circle');
+          ph.setAttribute('class', 'ph'); ph.setAttribute('r', n.r * 0.42);
+          g.appendChild(ph);
+        }
+        const ring = document.createElementNS(SVGNS, 'circle');
+        ring.setAttribute('class', 'ring'); ring.setAttribute('r', n.r + 5);
+        g.appendChild(ring);
+        g.appendChild(svgText('cat', n.r + 16, ((n.p.tags || [])[0] || 'WORK')));
+        g.appendChild(svgText('label', n.r + 32, n.p.title || ''));
+        g.addEventListener('mouseenter', () => n.edges.forEach(l => l.el.classList.add('hot')));
+        g.addEventListener('mouseleave', () => n.edges.forEach(l => l.el.classList.remove('hot')));
+        g.addEventListener('click', () => { if (!dragMoved) openDetail(n.p.id); });
+      }
+      n.el = g; svg.appendChild(g);
+    });
+
+    function paint() {
+      for (const l of links) {
+        l.el.setAttribute('x1', l.s.x.toFixed(1)); l.el.setAttribute('y1', l.s.y.toFixed(1));
+        l.el.setAttribute('x2', l.t.x.toFixed(1)); l.el.setAttribute('y2', l.t.y.toFixed(1));
+      }
+      for (const n of nodes) n.el.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+    }
+
+    // ── 拖拽 ──
+    let drag = null, dragMoved = false;
+    svg.addEventListener('pointerdown', e => {
+      const g = e.target.closest('.sc-node'); if (!g) return;
+      const n = nodes.find(x => x.el === g); if (!n || n.center) return;
+      drag = n; dragMoved = false; n.fx = n.x; n.fy = n.y;
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      startLoop();
+    });
+    svg.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const r = svg.getBoundingClientRect();
+      drag.fx = e.clientX - r.left; drag.fy = e.clientY - r.top; dragMoved = true; startLoop();
+    });
+    const endDrag = () => { if (drag) { drag.fx = drag.fy = null; drag = null; } };
+    svg.addEventListener('pointerup', endDrag);
+    svg.addEventListener('pointercancel', endDrag);
+
+    // ── 窗口缩放:更新尺寸与中心,重新收敛 ──
+    const onResize = () => {
+      W = stage.clientWidth || W; H = stage.clientHeight || H; cx = W / 2; cy = H / 2;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      center.fx = cx; center.fy = cy; startLoop();
+    };
+    window.addEventListener('resize', onResize);
+    // 本次会话实例:teardown 或下一次渲染会把 studioConstel 换掉,旧闭包据此自停,绝不空引用
+    const ctx = { raf: 0, onResize };
+    studioConstel = ctx;
+
+    // ── 主循环:实例失效/无连接/切主题/切 tab 即自停;静止后停转省电,交互再唤醒 ──
+    let running = false, settle = 0;
+    function frame() {
+      if (studioConstel !== ctx || !svg.isConnected
+          || document.body.getAttribute('data-theme') !== 'studio' || state.tab !== 'projects') {
+        running = false; return;
+      }
+      step(); paint(); settle++;
+      if (settle > 900 && !drag) { running = false; return; }
+      ctx.raf = requestAnimationFrame(frame);
+    }
+    function startLoop() {
+      if (studioConstel !== ctx) return;
+      settle = 0;
+      if (!running) { running = true; ctx.raf = requestAnimationFrame(frame); }
+    }
+
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    for (let i = 0; i < 60; i++) step();   // 先预热,首帧不至于乱飞
+    paint();
+    startLoop();
   }
 
   /* ── GALLERY ── */
@@ -2029,7 +2180,9 @@ body.is-previewing { padding-top: 52px; }
   function attachDragHandlers() {
     // 仅管理员、在作品列表、未按标签筛选时可排序(筛选子集排序含义不清)
     if (!(state.isAdmin && state.tab === 'projects' && state.filterTag === 'all')) return;
-    const cards = [...document.querySelectorAll('[data-proj]')];
+    // 只在当前可见主题的根里找卡片,避免选中其它隐藏主题残留的 [data-proj]
+    const themeRoot = document.getElementById('root-' + state.theme);
+    const cards = themeRoot ? [...themeRoot.querySelectorAll('[data-proj]')] : [];
     if (cards.length < 2) return;
 
     cards.forEach(card => {
