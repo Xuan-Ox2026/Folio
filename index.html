@@ -2874,18 +2874,30 @@ body.is-previewing { padding-top: 52px; }
         .export-bar button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
           padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
         .export-bar button:hover { background: #1d4ed8; }
-        @media print { .export-bar { display: none !important; } .r-page { padding: 24px 28px; } }
+        @page { margin: 0; }
+        @media print { .export-bar { display: none !important; } }
       </style></head>
       <body>
         <div class="export-bar">
-          <span>保存方法：点右边按钮后，把"打印机/目标"选成 <b>「另存为 PDF」</b>，左下按钮就会变成「保存」。深色主题记得在"更多设置"勾上 <b>「背景图形」</b>。</span>
+          <span>点右边按钮 → 把"打印机/目标"选成 <b>「另存为 PDF」</b>。想要<b>一整页不断开</b>：把"边距"选 <b>「无」</b>、缩放用"默认"。深色主题记得勾 <b>「背景图形」</b>。</span>
           <button onclick="window.print()">🖨 保存为 PDF</button>
         </div>
         <div class="r-page">${buildResumeHTML()}</div>
+        <script>
+          addEventListener('load', function () {
+            var p = document.querySelector('.r-page');
+            if (!p) return;
+            var W = Math.ceil(p.getBoundingClientRect().width);
+            var H = Math.ceil(Math.max(p.scrollHeight, p.getBoundingClientRect().height)) + 100;
+            var s = document.createElement('style');
+            s.textContent = '@page { size: ' + W + 'px ' + H + 'px; margin: 0; }';
+            document.head.appendChild(s);
+          });
+        <\/script>
       </body></html>`);
     w.document.close();
     w.onload = () => w.focus();
-    toast('已生成 · 点页面顶部「保存为 PDF」');
+    toast('已生成 · 点顶部「保存为 PDF」,边距选「无」即一整页');
   }
 
   function exportWord() {
