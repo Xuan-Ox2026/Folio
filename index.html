@@ -276,11 +276,12 @@ body[data-theme="mag"] .adminbar button:hover { background: rgba(42,36,24,0.06);
 }
 .mag-tools .add-btn:hover { background: #2a2418; color: #f5f1e8; }
 
-.mag-projects { display: grid; gap: 3rem; padding-bottom: 6rem; }
+.mag-feed { padding-bottom: 6rem; }
+/* 头条:保留大跨版编辑式排版,单篇置顶当封面故事 */
 .mag-card { cursor: pointer; display: grid; grid-template-columns: 1fr 1.6fr; gap: 2.5rem; align-items: start; padding-bottom: 3rem; border-bottom: 1px solid rgba(42,36,24,0.18); }
 .mag-card:last-child { border-bottom: none; }
-.mag-card:nth-child(even) { grid-template-columns: 1.6fr 1fr; }
-.mag-card:nth-child(even) .mag-card-img { order: 2; }
+.mag-feature { margin-bottom: 3.5rem; }
+.mag-feature:last-child { margin-bottom: 0; }     /* 只有一篇时不留多余下边距 */
 .mag-card-img { aspect-ratio: 4/3; background: #e3dac6; overflow: hidden; position: relative; }
 .mag-card-img img { width: 100%; height: 100%; object-fit: contain; filter: sepia(0.08); transition: transform 0.4s ease; }
 .mag-card:hover .mag-card-img img { transform: scale(1.03); }
@@ -290,6 +291,18 @@ body[data-theme="mag"] .adminbar button:hover { background: rgba(42,36,24,0.06);
 .mag-card-body h2 { font-family: 'Fraunces', 'Noto Serif SC', serif; font-weight: 400; font-size: 38px; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 1rem; color: #2a2418; }
 .mag-card-body p { font-size: 15px; line-height: 1.65; color: #4a4030; max-width: 50ch; }
 .mag-card-body .readmore { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 14px; color: #2a2418; margin-top: 0.8rem; display: inline-block; }
+
+/* ── 内页网格:头条之外的作品,密度随数量自动伸缩 ── */
+.mag-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3.5rem 3rem; }
+.mag-grid-card { cursor: pointer; }
+.mag-grid-img { aspect-ratio: 4/3; background: #e3dac6; overflow: hidden; position: relative; margin-bottom: 1.1rem; }
+.mag-grid-img img { width: 100%; height: 100%; object-fit: contain; filter: sepia(0.08); transition: transform 0.4s ease; }
+.mag-grid-card:hover .mag-grid-img img { transform: scale(1.03); }
+.mag-grid-img.empty { display: flex; align-items: center; justify-content: center; font-family: 'Instrument Serif', serif; font-style: italic; color: #b8ad94; font-size: 13px; }
+.mag-grid-body .cat { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 13px; color: #8a7a5a; margin-bottom: 0.45rem; }
+.mag-grid-body h3 { font-family: 'Fraunces', 'Noto Serif SC', serif; font-weight: 400; font-size: 24px; line-height: 1.12; letter-spacing: -0.015em; margin-bottom: 0.6rem; color: #2a2418; }
+.mag-grid-body p { font-size: 14px; line-height: 1.6; color: #4a4030; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.mag-grid-body .readmore { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 13px; color: #2a2418; margin-top: 0.7rem; display: inline-block; }
 
 .mag-empty { text-align: center; padding: 6rem 1rem; font-family: 'Instrument Serif', serif; font-style: italic; font-size: 18px; color: #8a7a5a; }
 
@@ -302,8 +315,9 @@ body[data-theme="mag"] .adminbar button:hover { background: rgba(42,36,24,0.06);
   .mag-frame { padding: 0 1.2rem; }
   .mag-hero { grid-template-columns: 1fr; gap: 2rem; padding: 3rem 0 2rem; }
   .mag-hero h1 { font-size: 56px; }
-  .mag-card, .mag-card:nth-child(even) { grid-template-columns: 1fr; gap: 1.2rem; }
-  .mag-card:nth-child(even) .mag-card-img { order: 0; }
+  .mag-card { grid-template-columns: 1fr; gap: 1.2rem; }
+  .mag-feature { margin-bottom: 2.5rem; }
+  .mag-grid { grid-template-columns: 1fr; gap: 2.5rem; }
 }
 
 /* ============================================================
@@ -1596,20 +1610,35 @@ body.is-previewing { padding-top: 52px; }
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ 新文章</button>' : ''}
       </div>
       ${filtered.length ? `
-        <div class="mag-projects">
-          ${filtered.map(p => `
-            <article class="mag-card" data-proj="${p.id}">
-              <div class="mag-card-img ${p.image ? '' : 'empty'}">
-                ${p.image ? `<img src="${p.image}" alt="">` : '<span>无图</span>'}
-              </div>
-              <div class="mag-card-body">
-                <div class="cat">${esc((p.tags || [])[0] || '随笔')}</div>
-                <h2>${esc(p.title)}</h2>
-                <p>${esc(p.description || '').slice(0, 200)}${(p.description || '').length > 200 ? '…' : ''}</p>
-                <span class="readmore">阅读全文 →</span>
-              </div>
-            </article>
-          `).join('')}
+        <div class="mag-feed">
+          <article class="mag-card mag-feature" data-proj="${filtered[0].id}">
+            <div class="mag-card-img ${filtered[0].image ? '' : 'empty'}">
+              ${filtered[0].image ? `<img src="${filtered[0].image}" alt="">` : '<span>无图</span>'}
+            </div>
+            <div class="mag-card-body">
+              <div class="cat">${esc((filtered[0].tags || [])[0] || '随笔')}</div>
+              <h2>${esc(filtered[0].title)}</h2>
+              <p>${esc(filtered[0].description || '').slice(0, 200)}${(filtered[0].description || '').length > 200 ? '…' : ''}</p>
+              <span class="readmore">阅读全文 →</span>
+            </div>
+          </article>
+          ${filtered.length > 1 ? `
+            <div class="mag-grid">
+              ${filtered.slice(1).map(p => `
+                <article class="mag-grid-card" data-proj="${p.id}">
+                  <div class="mag-grid-img ${p.image ? '' : 'empty'}">
+                    ${p.image ? `<img src="${p.image}" alt="">` : '<span>无图</span>'}
+                  </div>
+                  <div class="mag-grid-body">
+                    <div class="cat">${esc((p.tags || [])[0] || '随笔')}</div>
+                    <h3>${esc(p.title)}</h3>
+                    <p>${esc((p.description || '').slice(0, 120))}${(p.description || '').length > 120 ? '…' : ''}</p>
+                    <span class="readmore">阅读全文 →</span>
+                  </div>
+                </article>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
       ` : '<div class="mag-empty">还没有作品。点击 + 新文章 开始第一篇。</div>'}
     `;
