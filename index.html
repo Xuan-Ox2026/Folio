@@ -2867,13 +2867,25 @@ body.is-previewing { padding-top: 52px; }
       <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono&family=Noto+Serif+SC:wght@400;700&family=Cormorant+Garamond:wght@400;500;700&display=swap" rel="stylesheet">
       <title>${esc(getDisplayName())} · 简历</title>
       <style>${resumeCss(pal)}
-        @media print { .r-page { padding: 24px 28px; } }
+        .export-bar { position: sticky; top: 0; z-index: 99; display: flex; gap: 16px; align-items: center;
+          justify-content: space-between; flex-wrap: wrap; background: #161616; color: #fff;
+          padding: 11px 18px; font: 13.5px/1.5 'Segoe UI','Microsoft YaHei',sans-serif; }
+        .export-bar b { color: #ffd400; }
+        .export-bar button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
+          padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .export-bar button:hover { background: #1d4ed8; }
+        @media print { .export-bar { display: none !important; } .r-page { padding: 24px 28px; } }
       </style></head>
-      <body><div class="r-page">${buildResumeHTML()}</div></body></html>`);
+      <body>
+        <div class="export-bar">
+          <span>保存方法：点右边按钮后，把"打印机/目标"选成 <b>「另存为 PDF」</b>，左下按钮就会变成「保存」。深色主题记得在"更多设置"勾上 <b>「背景图形」</b>。</span>
+          <button onclick="window.print()">🖨 保存为 PDF</button>
+        </div>
+        <div class="r-page">${buildResumeHTML()}</div>
+      </body></html>`);
     w.document.close();
-    // Give images/fonts a moment to load before invoking the print dialog.
-    w.onload = () => { w.focus(); setTimeout(() => w.print(), 250); };
-    toast('已生成，请在打印窗口选择"另存为 PDF"');
+    w.onload = () => w.focus();
+    toast('已生成 · 点页面顶部「保存为 PDF」');
   }
 
   function exportWord() {
