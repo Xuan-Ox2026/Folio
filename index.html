@@ -422,6 +422,18 @@ body[data-theme="studio"] .adminbar button:hover { color: #f4e409; }
 .studio-card-body .arrow { font-family: 'Space Grotesk', sans-serif; font-size: 22px; color: #777; transition: transform 0.2s ease; }
 .studio-card:hover .studio-card-body .arrow { color: #f4e409; transform: translate(4px, -4px); }
 
+/* 特色置顶大卡 + 紧凑自适应网格 */
+.studio-featured { display: grid; grid-template-columns: 1.45fr 1fr; margin-bottom: 16px; }
+.studio-featured .studio-card-img { aspect-ratio: auto; min-height: 340px; }
+.studio-featured-body { padding: 34px 32px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.studio-featured-body .cat { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #f4e409; letter-spacing: 0.2em; text-transform: uppercase; }
+.studio-featured-body h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: clamp(26px, 3vw, 42px); line-height: 1.04; letter-spacing: -0.02em; color: #f0f0ec; }
+.studio-featured-body p { font-size: 14px; line-height: 1.65; color: #9a9a96; }
+.studio-featured-body .arrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #777; letter-spacing: 0.15em; margin-top: 4px; transition: color 0.2s ease; }
+.studio-featured:hover .arrow { color: #f4e409; }
+.studio-grid-compact { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.studio-grid-compact .studio-card:nth-child(n) { grid-column: auto; }
+
 .studio-empty { text-align: center; padding: 6rem 1rem; color: #777; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
 
 .studio-footer { padding: 3rem 0 4rem; border-top: 1px solid #222; margin-top: 4rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; }
@@ -436,6 +448,8 @@ body[data-theme="studio"] .adminbar button:hover { color: #f4e409; }
   .studio-hero .right { align-items: flex-start; }
   .studio-hero h1 { font-size: 60px; }
   .studio-card[class] { grid-column: span 12; }
+  .studio-featured { grid-template-columns: 1fr; }
+  .studio-featured .studio-card-img { min-height: 220px; }
 }
 
 /* ============================================================
@@ -1625,24 +1639,39 @@ body.is-previewing { padding-top: 52px; }
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ NEW PROJECT</button>' : ''}
       </div>
-      ${filtered.length ? `
-        <div class="studio-grid">
-          ${filtered.map((p, i) => `
-            <div class="studio-card" data-proj="${p.id}">
-              <div class="studio-card-img ${p.image ? '' : 'empty'}">
-                ${p.image ? `<img src="${p.image}" alt="">` : '<div class="placeholder"></div>'}
-              </div>
-              <div class="studio-card-body">
-                <div class="left">
-                  <h3>${esc(p.title)}</h3>
-                  <div class="cat">${String(i + 1).padStart(2, '0')} / ${esc((p.tags || [])[0] || 'WORK')}</div>
-                </div>
-                <div class="arrow">↗</div>
-              </div>
+      ${filtered.length ? (() => {
+        // 未筛选且项目够多时,第一个(拖动排序的最顶)做成特色大卡,其余进紧凑网格
+        const showFeatured = state.filterTag === 'all' && filtered.length >= 3;
+        const featured  = showFeatured ? filtered[0] : null;
+        const gridItems = showFeatured ? filtered.slice(1) : filtered;
+        const offset    = showFeatured ? 1 : 0;
+        const card = (p, n) => `
+          <div class="studio-card" data-proj="${p.id}">
+            <div class="studio-card-img ${p.image ? '' : 'empty'}">
+              ${p.image ? `<img src="${p.image}" alt="">` : '<div class="placeholder"></div>'}
             </div>
-          `).join('')}
-        </div>
-      ` : '<div class="studio-empty">— EMPTY / ADD YOUR FIRST PROJECT —</div>'}
+            <div class="studio-card-body">
+              <div class="left">
+                <h3>${esc(p.title)}</h3>
+                <div class="cat">${String(n).padStart(2, '0')} / ${esc((p.tags || [])[0] || 'WORK')}</div>
+              </div>
+              <div class="arrow">↗</div>
+            </div>
+          </div>`;
+        const featuredHtml = featured ? `
+          <div class="studio-card studio-featured" data-proj="${featured.id}">
+            <div class="studio-card-img ${featured.image ? '' : 'empty'}">
+              ${featured.image ? `<img src="${featured.image}" alt="">` : '<div class="placeholder"></div>'}
+            </div>
+            <div class="studio-featured-body">
+              <div class="cat">FEATURED / ${esc((featured.tags || [])[0] || 'WORK')}</div>
+              <h2>${esc(featured.title)}</h2>
+              ${featured.description ? `<p>${esc((featured.description || '').slice(0, 150))}${(featured.description || '').length > 150 ? '…' : ''}</p>` : ''}
+              <div class="arrow">VIEW PROJECT ↗</div>
+            </div>
+          </div>` : '';
+        return featuredHtml + `<div class="studio-grid studio-grid-compact">${gridItems.map((p, i) => card(p, i + offset + 1)).join('')}</div>`;
+      })() : '<div class="studio-empty">— EMPTY / ADD YOUR FIRST PROJECT —</div>'}
     `;
 
     root.innerHTML = `
