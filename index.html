@@ -408,7 +408,7 @@ body[data-theme="studio"] .adminbar button:hover { color: #f4e409; }
 
 /* ── 作品关系网(星座力导向图)── */
 .studio-constel {
-  position: relative; width: 100%; height: clamp(440px, 64vh, 680px);
+  position: relative; width: 100%; height: clamp(500px, 70vh, 740px);
   margin-bottom: 1rem; border: 1px solid #1c1c1c; border-radius: 10px; overflow: hidden;
   background:
     radial-gradient(1100px 560px at 50% 42%, rgba(244,228,9,0.05), transparent 62%),
@@ -1742,14 +1742,21 @@ body.is-previewing { padding-top: 52px; }
     });
     const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
 
-    // ── 边:中心→每个项目;同标签项目互连 ──
+    // ── 边:中心→每个项目;同标签项目「串成链」(不两两全连,避免某标签项目多时拧成团) ──
     const links = [];
-    projects.forEach(p => links.push({ s: center, t: byId[p.id], dist: minDim() * 0.30, k: 0.03, tag: false }));
-    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
-      const A = projects[i], B = projects[j];
-      const at = A.tags || [], bt = B.tags || [];
-      if (at.some(t => bt.includes(t))) links.push({ s: byId[A.id], t: byId[B.id], dist: 150, k: 0.012, tag: true });
-    }
+    projects.forEach(p => links.push({ s: center, t: byId[p.id], dist: minDim() * 0.44, k: 0.028, tag: false }));
+    const byTag = Object.create(null);  // 无原型,防 tag 名为 constructor/__proto__ 时踩原型属性
+    projects.forEach(p => (p.tags || []).forEach(t => (byTag[t] = byTag[t] || []).push(p.id)));
+    const seen = new Set();
+    Object.values(byTag).forEach(ids => {
+      for (let i = 0; i + 1 < ids.length; i++) {
+        const a = ids[i], b = ids[i + 1];
+        if (a === b) continue;            // 同项目重复标签会让相邻 id 相同,跳过自连
+        const key = a < b ? a + '|' + b : b + '|' + a;
+        if (seen.has(key)) continue; seen.add(key);
+        links.push({ s: byId[a], t: byId[b], dist: 250, k: 0.004, tag: true });
+      }
+    });
     // 记录每个节点关联的边,供 hover 高亮
     nodes.forEach(n => n.edges = []);
     links.forEach(l => { l.s.edges.push(l); l.t.edges.push(l); });
@@ -1759,8 +1766,8 @@ body.is-previewing { padding-top: 52px; }
       for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
         let dx = b.x - a.x, dy = b.y - a.y; let d2 = dx * dx + dy * dy || 0.01; let d = Math.sqrt(d2);
-        const min = a.r + b.r + 24;
-        let rep = 5200 / d2;
+        const min = a.r + b.r + 58;
+        let rep = 15500 / d2;
         if (d < min) rep += (min - d) * 0.18;
         const fx = (dx / d) * rep, fy = (dy / d) * rep;
         if (a.fx == null) { a.vx -= fx; a.vy -= fy; }
@@ -1830,10 +1837,10 @@ body.is-previewing { padding-top: 52px; }
         ring.setAttribute('class', 'ring'); ring.setAttribute('r', n.r + 5);
         g.appendChild(ring);
         g.appendChild(svgText('cat', n.r + 16, ((n.p.tags || [])[0] || 'WORK')));
-        g.appendChild(svgText('label', n.r + 32, n.p.title || ''));
+        const _t = n.p.title || '';
+        g.appendChild(svgText('label', n.r + 32, _t.length > 10 ? _t.slice(0, 10) + '…' : _t));
         g.addEventListener('mouseenter', () => n.edges.forEach(l => l.el.classList.add('hot')));
         g.addEventListener('mouseleave', () => n.edges.forEach(l => l.el.classList.remove('hot')));
-        g.addEventListener('click', () => { if (!dragMoved) openDetail(n.p.id); });
       }
       n.el = g; svg.appendChild(g);
     });
@@ -1846,23 +1853,28 @@ body.is-previewing { padding-top: 52px; }
       for (const n of nodes) n.el.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
     }
 
-    // ── 拖拽 ──
-    let drag = null, dragMoved = false;
+    // ── 拖拽 / 点击:用位移阈值区分(几乎没动=点击开详情,移动超 5px=拖拽)──
+    let drag = null, downX = 0, downY = 0, moved = false;
     svg.addEventListener('pointerdown', e => {
       const g = e.target.closest('.sc-node'); if (!g) return;
       const n = nodes.find(x => x.el === g); if (!n || n.center) return;
-      drag = n; dragMoved = false; n.fx = n.x; n.fy = n.y;
+      drag = n; moved = false; downX = e.clientX; downY = e.clientY;
+      n.fx = n.x; n.fy = n.y;
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       startLoop();
     });
     svg.addEventListener('pointermove', e => {
       if (!drag) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) moved = true;
       const r = svg.getBoundingClientRect();
-      drag.fx = e.clientX - r.left; drag.fy = e.clientY - r.top; dragMoved = true; startLoop();
+      drag.fx = e.clientX - r.left; drag.fy = e.clientY - r.top; startLoop();
     });
-    const endDrag = () => { if (drag) { drag.fx = drag.fy = null; drag = null; } };
-    svg.addEventListener('pointerup', endDrag);
-    svg.addEventListener('pointercancel', endDrag);
+    svg.addEventListener('pointerup', () => {
+      if (!drag) return;
+      const n = drag; n.fx = n.fy = null; drag = null;
+      if (!moved) openDetail(n.p.id);   // 几乎没动 = 点击,打开该项目详情
+    });
+    svg.addEventListener('pointercancel', () => { if (drag) { drag.fx = drag.fy = null; drag = null; } });
 
     // ── 窗口缩放:更新尺寸与中心,重新收敛 ──
     const onResize = () => {
