@@ -104,6 +104,15 @@ img { display: block; max-width: 100%; }
 .detail-gallery-item img { width: 100%; max-height: 70vh; object-fit: contain; background: #f3f3f0; border-radius: 6px; display: block; }
 .detail-gallery-item figcaption { font-size: 13px; color: #666; margin-top: 0.5rem; line-height: 1.55; }
 
+/* ── 详情:视频嵌入(B站 / YouTube)── */
+.detail-videos { margin: 1.4rem 0; }
+.detail-video-item { margin: 0 0 1.3rem; }
+.video-embed { position: relative; width: 100%; padding-top: 56.25%; background: #000; border-radius: 6px; overflow: hidden; }
+.video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.detail-video-item figcaption { font-size: 13px; color: #666; margin-top: 0.5rem; line-height: 1.55; }
+/* 编辑器:视频条目的平台标签 */
+.video-chip { flex: none; font-size: 12px; padding: 4px 10px; background: #f3f3f0; border: 1px solid #e3e3df; border-radius: 6px; color: #555; white-space: nowrap; }
+
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; }
 .btn-solid { background: #1a1a1a; color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; }
 .btn-solid:hover { background: #000; }
@@ -1197,6 +1206,39 @@ body.is-previewing { padding-top: 52px; }
   const PER_IMG_MAX = 6_000_000;   // 单图压缩后体积上限(约 6MB 字节),纯兜底防超大文件
   let editorSession = null;        // 当前编辑会话令牌;关闭/重开后旧异步任务凭此作废
 
+  // ── 视频:只做嵌入 ──
+  // 大视频(几个 GB~10GB+)不可能进免费版后端,统一走 B站/YouTube 平台托管。
+  // 库里只存 {provider, id},播放地址由我们用 ID 拼出 —— 永不把用户粘的原始链接塞进 iframe,杜绝注入。
+  const MAX_VIDEOS = 12;
+  const VIDEO_PROVIDERS = {
+    youtube:  { id: /^[A-Za-z0-9_-]{11}$/,  label: 'YouTube',  embed: id => 'https://www.youtube.com/embed/' + id },
+    bilibili: { id: /^BV[0-9A-Za-z]{10}$/,  label: '哔哩哔哩', embed: id => 'https://player.bilibili.com/player.html?bvid=' + id + '&autoplay=0&high_quality=1' }
+  };
+  // 从用户粘贴的链接里识别平台 + 抽取视频 ID;识别不了返回 null
+  function parseVideoUrl(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    const bv = s.match(/BV[0-9A-Za-z]{10}/);                 // 哔哩哔哩:完整链接 / 短链文本 / 裸 BV 号
+    if (bv) return { provider: 'bilibili', id: bv[0] };
+    const yt = s.match(/(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (yt) return { provider: 'youtube', id: yt[1] };
+    return null;
+  }
+  // 校验一条视频记录合法(载入 DB 数据、编辑、渲染前都过一遍,防注入)
+  // 注:用 Object.hasOwn 取 provider,否则 provider 为 '__proto__'/'toString' 等继承键时
+  //     VIDEO_PROVIDERS[v.provider] 会拿到原型上的成员,p.id.test 抛错把页面带崩。
+  function safeVideo(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (!Object.hasOwn(VIDEO_PROVIDERS, v.provider)) return null;
+    const p = VIDEO_PROVIDERS[v.provider];
+    if (typeof v.id !== 'string' || !p.id.test(v.id)) return null;
+    return { provider: v.provider, id: v.id, caption: typeof v.caption === 'string' ? v.caption : '' };
+  }
+  // 清洗整个 videos 字段:坏值/非数组兜底成 [],逐条校验,并截断到上限
+  // (上限也要管 DB/静态快照里的已有数据,不能只在 UI 新增时限制)
+  const cleanVideos = arr => (Array.isArray(arr) ? arr : []).map(safeVideo).filter(Boolean).slice(0, MAX_VIDEOS);
+  const videoEmbedSrc = v => (Object.hasOwn(VIDEO_PROVIDERS, v.provider) ? VIDEO_PROVIDERS[v.provider].embed(v.id) : '');
+
   function toast(msg) {
     const el = document.createElement('div');
     el.className = 'toast'; el.textContent = msg;
@@ -1339,6 +1381,7 @@ body.is-previewing { padding-top: 52px; }
       tags:          proj.tags          || [],
       image:         proj.image         || null,
       gallery:       proj.gallery       || [],
+      videos:        proj.videos        || [],
       created_epoch: proj.created_epoch || Date.now()
     });
     if (error) { console.error('persistProject 失败:', error); toast('保存失败: ' + (error.message || error.code || '未知错误')); return false; }
@@ -2268,7 +2311,9 @@ body.is-previewing { padding-top: 52px; }
     try {
       // 提交完整字段:upsert 底层是 INSERT...ON CONFLICT,projects 表 title 等列是
       // NOT NULL,只发排序键会在插入阶段触发 NOT NULL 报错(ON CONFLICT 救不了)。
-      // 字段集与 persistProject 一致;单管理员场景下用本地当前数据覆盖无风险。
+      // 只需带齐 NOT NULL 必填列;gallery / videos 这类有默认值的 jsonb 列故意省略 ——
+      // 排序只更新已存在的行,未出现在 payload 里的列在 ON CONFLICT UPDATE 分支会保留原值。
+      // 单管理员场景下用本地当前数据覆盖无风险。
       const rows = state.projects.map(p => ({
         id:            p.id,
         user_id:       state.user.id,
@@ -2357,6 +2402,21 @@ body.is-previewing { padding-top: 52px; }
       : '';
     const techHtml = p.tech ? `<div style="font-size:13px;margin:1rem 0;color:#777;"><strong style="color:#333;">技术 / 工具:</strong> ${esc(p.tech)}</div>` : '';
     const linkHtml = p.link ? `<div style="margin:1rem 0;"><a href="${esc(p.link)}" target="_blank" rel="noopener" style="color:#185fa5;">→ ${esc(p.link)}</a></div>` : '';
+    const safeVideos = cleanVideos(p.videos);
+    const videoHtml = safeVideos.length
+      ? `<div class="detail-videos">
+           ${safeVideos.map(v => `
+             <figure class="detail-video-item">
+               <div class="video-embed">
+                 <iframe src="${esc(videoEmbedSrc(v))}" loading="lazy" scrolling="no"
+                   frameborder="0" allowfullscreen
+                   referrerpolicy="strict-origin-when-cross-origin"
+                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"></iframe>
+               </div>
+               ${v.caption ? `<figcaption>${esc(v.caption)}</figcaption>` : ''}
+             </figure>`).join('')}
+         </div>`
+      : '';
     const safeGallery = (p.gallery || []).filter(g => safeImg(g.url));
     const galleryHtml = safeGallery.length
       ? `<div class="detail-gallery">
@@ -2375,14 +2435,14 @@ body.is-previewing { padding-top: 52px; }
          </div>`
       : '';
     openModal(p.title,
-      imgHtml + tagHtml +
+      imgHtml + tagHtml + videoHtml +
       `<p style="line-height:1.7;white-space:pre-wrap;color:#333;">${esc(p.description || '(没有描述)')}</p>` +
       techHtml + linkHtml + galleryHtml + adminActions);
   }
 
   function openEditor(p) {
     state.editingId = p ? p.id : null;
-    const d = p || { title: '', description: '', tags: [], tech: '', link: '', image: '', gallery: [] };
+    const d = p || { title: '', description: '', tags: [], tech: '', link: '', image: '', gallery: [], videos: [] };
     const body = `
       <div class="form-row">
         <span class="label">封面图片</span>
@@ -2396,6 +2456,14 @@ body.is-previewing { padding-top: 52px; }
         <div id="gallery-list" class="gallery-edit"></div>
         <div class="upload-zone" id="gallery-add" style="padding:1rem;">+ 点击或拖动添加图片到图集</div>
         <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;">
+      </div>
+      <div class="form-row">
+        <span class="label">视频(可选 · 粘贴 B站 / YouTube 链接 · 最多 ${MAX_VIDEOS} 个)</span>
+        <div id="video-list" class="gallery-edit"></div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="video-input" placeholder="粘贴 B站 或 YouTube 视频链接,回车或点添加" style="flex:1;min-width:0;">
+          <button type="button" class="btn-line" id="video-add" style="flex:none;">+ 添加</button>
+        </div>
       </div>
       <div class="form-row"><span class="label">标题 *</span><input type="text" id="p-title" value="${esc(d.title)}"></div>
       <div class="form-row"><span class="label">描述</span><textarea id="p-desc" rows="4">${esc(d.description)}</textarea></div>
@@ -2557,6 +2625,83 @@ body.is-previewing { padding-top: 52px; }
       addGalleryFiles(e.dataTransfer.files);
     });
 
+    /* ── 视频嵌入(B站 / YouTube)── */
+    // 载入时就丢掉非法记录(防数据库里被塞入伪造 provider/id)、非数组兜底、截断到上限
+    const videoData = cleanVideos(d.videos);
+    let videoDragFrom = null;  // 视频排序的源下标
+    function renderVideoList() {
+      const wrap = $('video-list');
+      if (!wrap) return;  // 弹窗已关闭
+      wrap.innerHTML = videoData.map((v, i) => {
+        const label = (VIDEO_PROVIDERS[v.provider] || {}).label || v.provider;
+        return `
+        <div class="gallery-edit-item" data-vrow="${i}">
+          <span class="gallery-drag" draggable="true" title="拖动排序" aria-label="拖动排序">⠿</span>
+          <span class="video-chip">${esc(label)}</span>
+          <input type="text" class="video-cap" data-idx="${i}" value="${esc(v.caption)}" placeholder="这个视频是什么?写个说明">
+          <button type="button" class="btn-line btn-danger gallery-del" data-idx="${i}">删除</button>
+        </div>`;
+      }).join('');
+      wrap.querySelectorAll('.video-cap').forEach(inp => {
+        inp.oninput = () => { videoData[+inp.dataset.idx].caption = inp.value; };
+      });
+      wrap.querySelectorAll('.gallery-del').forEach(btn => {
+        btn.onclick = () => { videoData.splice(+btn.dataset.idx, 1); renderVideoList(); };
+      });
+      // 拖动排序:只有抓手可拖,整行是落点(同图集的做法)
+      wrap.querySelectorAll('.gallery-edit-item').forEach(row => {
+        const handle = row.querySelector('.gallery-drag');
+        handle.addEventListener('dragstart', e => {
+          videoDragFrom = +row.dataset.vrow;
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(videoDragFrom));
+          if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(row, 20, 20);
+        });
+        handle.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          wrap.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+          videoDragFrom = null;
+        });
+        row.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (videoDragFrom !== null && +row.dataset.vrow !== videoDragFrom) row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', e => {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          const from = videoDragFrom, to = +row.dataset.vrow;
+          videoDragFrom = null;
+          if (from === null || isNaN(from) || from === to) return;
+          const moved = videoData[from], target = videoData[to];
+          videoData.splice(from, 1);
+          const newTgt = videoData.indexOf(target);
+          videoData.splice(from < to ? newTgt + 1 : newTgt, 0, moved);
+          renderVideoList();
+        });
+      });
+    }
+    renderVideoList();
+    const addVideo = () => {
+      const inp = $('video-input');
+      if (!inp) return;
+      if (videoData.length >= MAX_VIDEOS) { toast(`视频最多 ${MAX_VIDEOS} 个`); return; }
+      const parsed = parseVideoUrl(inp.value);
+      if (!parsed) { toast('识别不了,请粘贴 B站 或 YouTube 视频链接'); return; }
+      if (videoData.some(v => v.provider === parsed.provider && v.id === parsed.id)) {
+        toast('这个视频已经添加过了'); inp.value = ''; return;
+      }
+      videoData.push({ provider: parsed.provider, id: parsed.id, caption: '' });
+      inp.value = '';
+      renderVideoList();
+    };
+    $('video-add').onclick = addVideo;
+    $('video-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); addVideo(); }
+    });
+
     document.querySelectorAll('[data-modal-action]').forEach(el => {
       el.onclick = async () => {
         const a = el.dataset.modalAction;
@@ -2565,9 +2710,12 @@ body.is-previewing { padding-top: 52px; }
           const title = $('p-title').value.trim();
           if (!title) return toast('请输入标题');
           if (pendingUploads > 0) return toast('图片还在处理中,请稍候再保存');
-          // 兜底:把当前图集说明输入框的最新值同步回数据
+          // 兜底:把当前图集 / 视频说明输入框的最新值同步回数据
           $('gallery-list').querySelectorAll('.gallery-cap').forEach(inp => {
             galleryData[+inp.dataset.idx].caption = inp.value;
+          });
+          $('video-list').querySelectorAll('.video-cap').forEach(inp => {
+            videoData[+inp.dataset.idx].caption = inp.value;
           });
           const existing = state.editingId
             ? state.projects.find(x => x.id === state.editingId)
@@ -2581,6 +2729,7 @@ body.is-previewing { padding-top: 52px; }
             tags:          $('p-tags').value.split(',').map(s => s.trim()).filter(Boolean),
             image:         imageData,
             gallery:       galleryData,
+            videos:        videoData,
             created_epoch: existing?.created_epoch || Date.now()
           };
           setBtnLoading(el, true);
