@@ -197,6 +197,7 @@ button.is-loading { pointer-events: none; }
 }
 .adminbar button { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
 .adminbar .user { opacity: 0.55; }
+body.is-static .adminbar, body.is-static #preview-banner { display: none !important; }  /* 静态发布版:无管理栏/无登录 */
 
 .export-wrap { position: relative; display: inline-flex; }
 .export-menu {
@@ -1121,6 +1122,7 @@ body.is-previewing { padding-top: 52px; }
       <div id="export-menu" class="export-menu">
         <button data-export="pdf">PDF（打印 / 另存为 PDF）</button>
         <button data-export="word">Word 文档（.doc）</button>
+        <button data-export="static">发布静态版（国内托管用 · index.html）</button>
         <button data-export="json">备份文件（.json）</button>
       </div>
     </div>
@@ -1157,7 +1159,9 @@ body.is-previewing { padding-top: 52px; }
   /* ── SUPABASE ── */
   const SUPABASE_URL = 'https://icafuhbqnicjzjoxeqor.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_COQq-Rf7wo66dAn4f5ZPAg_f3vdEb4F';
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // 静态发布版(已烤入数据)不连后端,也可能没加载 supabase-js;此时 sb 为 null,所有后端调用都不会被触发
+  const SNAPSHOT = window.__FOLIO_SNAPSHOT__ || null;
+  const sb = (!SNAPSHOT && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
   /* ── STATE ── */
   const state = {
@@ -1240,6 +1244,7 @@ body.is-previewing { padding-top: 52px; }
 
   /* ── DB OPS ── */
   async function loadPortfolio() {
+    if (!sb) return;  // 静态发布版:无后端,内容已由 initStatic 渲染
     const slug = getSlugFromUrl();
 
     // Root path: landing or auto-redirect logged-in user to their own page
@@ -1353,6 +1358,7 @@ body.is-previewing { padding-top: 52px; }
 
   /* ── AUTH ── */
   async function loginWithGitHub() {
+    if (!sb) return;
     await sb.auth.signInWithOAuth({
       provider: 'github',
       options: { redirectTo: window.location.href.split('?')[0].split('#')[0] }
@@ -2748,6 +2754,7 @@ body.is-previewing { padding-top: 52px; }
     if (kind === 'json') exportJSON();
     else if (kind === 'pdf') exportPDF();
     else if (kind === 'word') exportWord();
+    else if (kind === 'static') exportStaticSite();
   };
 
   function exportFilename(ext) {
@@ -2763,6 +2770,33 @@ body.is-previewing { padding-top: 52px; }
     a.href = url; a.download = 'portfolio-backup.json'; a.click();
     URL.revokeObjectURL(url);
     toast('已导出备份');
+  }
+
+  // 发布静态版:把当前页面源码 + 烤入的快照数据 打成一个独立 index.html。
+  // 该文件不连 Supabase/不需登录、Google 字体换国内镜像、移除 supabase-js CDN —— 纯只读,适合传到国内静态托管(如 Laf)。
+  async function exportStaticSite() {
+    toast('正在打包静态版…');
+    let src;
+    try {
+      src = await fetch(location.href, { cache: 'no-store' }).then(r => r.text());
+    } catch (e) {
+      toast('打包失败:读不到页面源码,请在已部署的网址上操作'); return;
+    }
+    const snap = { theme: state.theme, profile: state.profile, projects: state.projects, published: new Date().toISOString() };
+    // 把所有 < 转义成 <,防止项目文字里若含脚本闭合标记而截断注入脚本
+    const json = JSON.stringify(snap).replace(/</g, '\\u003c');
+    const inject = `<script>window.__FOLIO_SNAPSHOT__=${json};<\/script>\n`;
+    const out = src
+      .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2">\s*<\/script>\s*/i, '')
+      .replace(/fonts\.googleapis\.com/g, 'fonts.loli.net')
+      .replace(/fonts\.gstatic\.com/g, 'gstatic.loli.net')
+      .replace('</head>', inject + '</head>');
+    const blob = new Blob([out], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'index.html'; a.click();
+    URL.revokeObjectURL(url);
+    toast('已导出 index.html · 传到 Laf 静态托管即可');
   }
 
   // Shared resume markup used by both PDF (print) and Word export.
@@ -2938,7 +2972,22 @@ body.is-previewing { padding-top: 52px; }
   };
 
   /* ── BOOT ── */
+  // 静态发布版:直接用烤进来的数据渲染,纯只读,不连任何后端
+  function initStatic(snap) {
+    document.body.classList.add('is-static');
+    state.user = null;
+    state.isAdmin = false;
+    state.ownerId = null;
+    state.theme = snap.theme || 'studio';
+    state.profile = snap.profile || {};
+    state.projects = snap.projects || [];
+    state.filterTag = 'all';
+    state.tab = 'projects';
+    enterMain();
+  }
+
   async function init() {
+    if (SNAPSHOT) { initStatic(SNAPSHOT); return; }
     const { data: { session } } = await sb.auth.getSession();
     state.user = session?.user ?? null;
 
