@@ -501,100 +501,112 @@ body[data-theme="gallery"] .adminbar button:hover { color: #1a1a1a; }
 
 .gal-frame { padding: 0; max-width: none; }
 
-.gal-top {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 40px 60px 0;
+/* ── 始终置顶导航:品牌 + Works/About/Contact(左对齐,把右上角让给 adminbar,不打架)── */
+.gal-nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 24px 40px; flex-wrap: wrap;
+  padding: 17px 60px;
+  background: rgba(252,252,250,0.82);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid #ececea;
 }
-.gal-top .name { font-family: 'DM Mono', monospace; font-size: 11px; color: #1a1a1a; letter-spacing: 0.2em; text-transform: uppercase; }
-.gal-top .meta { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.15em; text-transform: uppercase; }
+.gal-nav .brand { font-family: 'Cormorant Garamond', 'Noto Serif SC', serif; font-size: 20px; letter-spacing: 0.01em; color: #1a1a1a; cursor: pointer; display: flex; align-items: center; }
+.gal-nav .brand .dot { width: 5px; height: 5px; border-radius: 50%; background: #1a1a1a; margin-right: 10px; }
+.gal-nav .links { display: flex; align-items: center; gap: 26px; }
+.gal-nav .links button, .gal-nav .links a {
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #9a9a96; padding: 4px 0; border-bottom: 1px solid transparent; cursor: pointer;
+}
+.gal-nav .links button:hover, .gal-nav .links a:hover { color: #1a1a1a; }
+.gal-nav .links button.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+.gal-nav .links a.contact { color: #1a1a1a; }
 
-.gal-hero {
-  min-height: 88vh; display: grid; grid-template-columns: 1fr 1fr;
-  gap: 0; padding: 0;
-}
-.gal-hero .left { padding: 60px; display: flex; flex-direction: column; justify-content: center; }
-.gal-hero .right { padding: 0; display: flex; align-items: center; justify-content: center; background: #fafaf8; }
-.gal-hero .marker {
-  font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0;
-  letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 2rem;
-}
+/* ── Hero:克制高度,让作品露头;大号衬线名 + 斜体一句话 + 一张竖图 ── */
+.gal-hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: center; padding: 70px 60px 60px; }
+.gal-hero .marker { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 1.6rem; }
 .gal-hero h1 {
   font-family: 'Cormorant Garamond', 'Noto Serif SC', serif;
-  font-weight: 400; font-size: clamp(56px, 9vw, 124px);
-  line-height: 1.0; letter-spacing: -0.01em;
-  color: #1a1a1a; margin-bottom: 2rem;
+  font-weight: 400; font-size: clamp(52px, 8vw, 108px);
+  line-height: 0.98; letter-spacing: -0.015em; color: #1a1a1a; margin-bottom: 1.4rem;
 }
 .gal-hero h1 em { font-style: italic; font-weight: 400; }
 .gal-hero .deck {
   font-family: 'Cormorant Garamond', 'Noto Serif SC', serif;
-  font-weight: 400; font-size: 19px; font-style: italic;
-  line-height: 1.55; color: #555; max-width: 38ch;
+  font-weight: 400; font-size: 20px; font-style: italic;
+  line-height: 1.5; color: #555; max-width: 34ch;
 }
-.gal-hero .portrait {
-  width: 320px; aspect-ratio: 3/4;
-  background: #ece9e2; overflow: hidden;
-}
+.gal-hero .right { display: flex; justify-content: flex-end; }
+.gal-hero .portrait { width: 100%; max-width: 380px; aspect-ratio: 3/4; background: #ece9e2; overflow: hidden; }
 .gal-hero .portrait img { width: 100%; height: 100%; object-fit: cover; }
-.gal-hero .portrait.geo { display: flex; align-items: center; justify-content: center; background: #ece9e2; }
-.gal-hero .portrait.geo svg { width: 70%; height: 70%; }
+.gal-hero .portrait.geo { display: flex; align-items: center; justify-content: center; }
+.gal-hero .portrait.geo svg { width: 64%; height: 64%; }
 
-.gal-section {
-  padding: 100px 60px 30px;
-  display: flex; justify-content: space-between; align-items: baseline;
-}
-.gal-section .title { font-family: 'DM Mono', monospace; font-size: 11px; color: #1a1a1a; letter-spacing: 0.2em; text-transform: uppercase; }
-.gal-section .count { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.15em; }
+/* ── 区块标题:Selected Works + 序号区间(001 — 0NN)── */
+.gal-section { padding: 34px 60px 24px; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #ececea; }
+.gal-section .title { font-family: 'DM Mono', monospace; font-size: 11px; color: #1a1a1a; letter-spacing: 0.22em; text-transform: uppercase; }
+.gal-section .count { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.18em; }
 
-.gal-tools { display: flex; justify-content: space-between; gap: 1rem; padding: 0 60px 40px; align-items: center; flex-wrap: wrap; }
-.gal-tools .chips { display: flex; gap: 1.5rem; flex-wrap: wrap; }
-.gal-tools .chip {
-  font-family: 'DM Mono', monospace; font-size: 10px;
-  color: #b0b0b0; letter-spacing: 0.15em; text-transform: uppercase;
-  padding: 2px 0; border-bottom: 1px solid transparent;
-}
+.gal-tools { display: flex; gap: 1.5rem; padding: 0 60px 48px; align-items: flex-start; flex-wrap: wrap; }
+.gal-tools .chip { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.16em; text-transform: uppercase; padding: 2px 0; border-bottom: 1px solid transparent; }
 .gal-tools .chip:hover { color: #1a1a1a; }
 .gal-tools .chip.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
-.gal-tools .add-btn {
-  font-family: 'Cormorant Garamond', serif; font-style: italic;
-  font-size: 18px; color: #1a1a1a;
-  padding-bottom: 2px; border-bottom: 1px solid #1a1a1a;
-}
+.gal-tools .add-btn { margin-left: auto; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 18px; color: #1a1a1a; padding-bottom: 2px; border-bottom: 1px solid #1a1a1a; }
 .gal-tools .add-btn:hover { color: #999; border-bottom-color: #999; }
 
-.gal-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 0;
-  padding-bottom: 100px;
-}
-.gal-card { cursor: pointer; padding: 30px 60px 60px; border-top: 1px solid #eee; transition: background 0.2s ease; }
-.gal-card:nth-child(2n) { border-left: 1px solid #eee; }
-.gal-card:hover { background: #fafaf8; }
-.gal-card-img { aspect-ratio: 4/5; background: #ece9e2; overflow: hidden; margin-bottom: 24px; }
-.gal-card-img img { width: 100%; height: 100%; object-fit: contain; transition: transform 0.5s ease; }
-.gal-card:hover .gal-card-img img { transform: scale(1.02); }
+/* ── 开篇大图(第一个作品当杂志开篇)── */
+.gal-feature { padding: 0 60px 88px; cursor: pointer; }
+.gal-feature-img { width: 100%; aspect-ratio: 16/10; background: #ece9e2; overflow: hidden; }
+.gal-feature-img img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.65s cubic-bezier(.2,.7,.2,1), filter 0.4s ease; }
+.gal-feature:hover .gal-feature-img img { transform: scale(1.025); filter: brightness(0.94); }
+.gal-feature-img.empty { display: flex; align-items: center; justify-content: center; }
+.gal-feature-img.empty .ph { width: 120px; height: 120px; border: 1px solid #d0cdc4; border-radius: 50%; }
+.gal-feature-body { display: flex; justify-content: space-between; align-items: flex-end; gap: 2rem; margin-top: 22px; }
+.gal-feature-body h2 { font-family: 'Cormorant Garamond', 'Noto Serif SC', serif; font-weight: 400; font-size: clamp(30px, 4vw, 46px); line-height: 1.05; letter-spacing: -0.01em; }
+.gal-feature:hover .gal-feature-body h2 { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
+.gal-feature-body .meta { font-family: 'DM Mono', monospace; font-size: 10px; color: #9a9a96; letter-spacing: 0.16em; text-transform: uppercase; text-align: right; white-space: nowrap; }
+.gal-feature-body .meta .n { display: block; color: #c8c5bd; margin-bottom: 6px; }
+
+/* ── 其余作品:双列错位编辑网格(右列下移做韵律,比例 4:5/3:4/1:1 循环)── */
+.gal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 64px 56px; padding: 0 60px 110px; align-items: start; }
+.gal-grid .gal-card:nth-child(2n) { margin-top: 84px; }
+.gal-card { cursor: pointer; }
+.gal-card-img { background: #ece9e2; overflow: hidden; margin-bottom: 18px; aspect-ratio: 4/5; }
+.gal-card.ar-mid .gal-card-img { aspect-ratio: 3/4; }
+.gal-card.ar-sq  .gal-card-img { aspect-ratio: 1/1; }
+.gal-card-img img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.65s cubic-bezier(.2,.7,.2,1), filter 0.4s ease; }
+.gal-card:hover .gal-card-img img { transform: scale(1.03); filter: brightness(0.94); }
 .gal-card-img.empty { display: flex; align-items: center; justify-content: center; }
-.gal-card-img.empty .ph { width: 50%; height: 50%; border: 1px solid #d0cdc4; border-radius: 50%; }
-.gal-card-body { display: flex; justify-content: space-between; align-items: baseline; }
-.gal-card-body .left h3 { font-family: 'Cormorant Garamond', 'Noto Serif SC', serif; font-weight: 400; font-size: 30px; line-height: 1.1; letter-spacing: -0.01em; color: #1a1a1a; margin-bottom: 6px; }
+.gal-card-img.empty .ph { width: 46%; height: 46%; border: 1px solid #d0cdc4; border-radius: 50%; }
+.gal-card-body { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.gal-card-body .left h3 { font-family: 'Cormorant Garamond', 'Noto Serif SC', serif; font-weight: 400; font-size: 26px; line-height: 1.12; letter-spacing: -0.01em; color: #1a1a1a; margin-bottom: 5px; }
+.gal-card:hover .gal-card-body .left h3 { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
 .gal-card-body .left .cat { font-family: 'DM Mono', monospace; font-size: 9px; color: #b0b0b0; letter-spacing: 0.2em; text-transform: uppercase; }
-.gal-card-body .num { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.15em; }
+.gal-card-body .num { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.16em; white-space: nowrap; }
 
 .gal-empty { text-align: center; padding: 6rem 1rem; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 22px; color: #b0b0b0; }
 
-.gal-footer { padding: 60px; border-top: 1px solid #eee; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2rem; }
-.gal-footer .socials { display: flex; gap: 2rem; }
-.gal-footer .socials a { font-family: 'DM Mono', monospace; font-size: 10px; color: #1a1a1a; letter-spacing: 0.2em; text-transform: uppercase; }
-.gal-footer .socials a:hover { color: #b0b0b0; }
-.gal-footer .copy { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.15em; }
+.gal-footer { padding: 54px 60px; border-top: 1px solid #ececea; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2rem; align-items: baseline; }
+.gal-footer .socials { display: flex; gap: 2rem; flex-wrap: wrap; }
+.gal-footer .socials a { font-family: 'DM Mono', monospace; font-size: 10px; color: #1a1a1a; letter-spacing: 0.18em; text-transform: uppercase; border-bottom: 1px solid transparent; }
+.gal-footer .socials a:hover { border-bottom-color: #1a1a1a; }
+.gal-footer .copy { font-family: 'DM Mono', monospace; font-size: 10px; color: #b0b0b0; letter-spacing: 0.16em; }
+
+body[data-theme="gallery"] .about-panel { max-width: 760px; padding: 56px 60px 90px; }
+body[data-theme="gallery"] .about-panel h2 { margin-bottom: 1.6rem; }
 
 @media (max-width: 720px) {
-  .gal-top, .gal-section, .gal-tools, .gal-footer { padding-left: 24px; padding-right: 24px; }
-  .gal-hero { grid-template-columns: 1fr; min-height: auto; }
-  .gal-hero .left { padding: 40px 24px; }
-  .gal-hero .right { padding: 40px 24px 60px; }
-  .gal-hero h1 { font-size: 60px; }
-  .gal-grid { grid-template-columns: 1fr; }
-  .gal-card { padding: 30px 24px 40px; }
-  .gal-card:nth-child(2n) { border-left: none; }
+  .gal-nav { padding: 13px 24px; gap: 22px; }
+  .gal-nav .links { gap: 18px; }
+  .gal-hero { grid-template-columns: 1fr; gap: 26px; padding: 40px 24px 44px; }
+  .gal-hero h1 { font-size: 54px; }
+  .gal-hero .right { justify-content: flex-start; }
+  .gal-hero .portrait { max-width: 220px; }
+  .gal-section, .gal-tools, .gal-feature, .gal-grid, .gal-footer { padding-left: 24px; padding-right: 24px; }
+  .gal-feature { padding-bottom: 56px; }
+  .gal-feature-body h2 { font-size: 30px; }
+  .gal-grid { grid-template-columns: 1fr; gap: 44px; }
+  .gal-grid .gal-card:nth-child(2n) { margin-top: 0; }
+  body[data-theme="gallery"] .about-panel { padding: 40px 24px 60px; }
 }
 
 /* ============================================================
@@ -738,7 +750,7 @@ body[data-theme="warm"] .adminbar button:hover { color: #2e1f10; background: rgb
 .about-panel h2 { margin-bottom: 1.5rem; font-size: 22px; }
 body[data-theme="mag"] .about-panel h2 { font-family: 'Fraunces', serif; font-style: italic; font-weight: 400; color: #2a2418; }
 body[data-theme="studio"] .about-panel h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #f0f0ec; }
-body[data-theme="gallery"] .about-panel h2 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-style: italic; color: #1a1a1a; font-size: 28px; }
+body[data-theme="gallery"] .about-panel h2 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-style: italic; color: #1a1a1a; font-size: 40px; }
 body[data-theme="warm"] .about-panel h2 { font-family: 'Noto Serif SC', serif; font-weight: 700; color: #2e1f10; }
 
 .about-panel .label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; opacity: 0.65; }
@@ -758,6 +770,11 @@ body[data-theme="studio"] .about-panel textarea {
 .about-panel .row { margin-bottom: 1rem; }
 .about-panel .actions { display: flex; gap: 12px; align-items: center; margin-top: 1.5rem; flex-wrap: wrap; }
 .about-panel .save-status { font-size: 12px; opacity: 0.7; }
+.about-panel .about-bio { font-size: 16px; line-height: 1.85; white-space: pre-wrap; margin: 0; }
+.about-panel .about-contact { margin-top: 2.6rem; padding-top: 1.6rem; border-top: 1px solid rgba(127,127,127,0.18); }
+.about-panel .about-contact-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.5; margin-bottom: 1rem; }
+.about-panel .about-contact-list { display: flex; gap: 1.6rem; flex-wrap: wrap; }
+.about-panel .about-contact-list a { font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
 .about-panel .danger-zone { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(127,127,127,0.2); }
 .about-panel .danger-zone .label { color: #c43d3d; }
 
@@ -2113,14 +2130,63 @@ body.is-previewing { padding-top: 52px; }
   function renderGallery() {
     const root = $('root-gallery');
     const { allTags, filtered } = getFilteredProjects();
-    const portrait = state.profile.avatar
-      ? `<div class="portrait"><img src="${state.profile.avatar}" alt=""></div>`
+    const name = getDisplayName();
+    const avatar = safeImg(state.profile.avatar);
+    const portrait = avatar
+      ? `<div class="portrait"><img src="${esc(avatar)}" alt=""></div>`
       : `<div class="portrait geo">${geoPlaceholder('gallery')}</div>`;
+    // 顶部"联系"入口:挑一个邮箱类社交直接 mailto(招聘方最想要的联系方式,始终可见)
+    // 只认 mailto: 链接或裸邮箱地址,避免 url 路径里含 @ 的普通链接被误判
+    const mail = getSocials().find(s => {
+      const u = (s.url || '').trim();
+      return /^mailto:/i.test(u) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u);
+    });
+    const mailHref = mail ? (/^mailto:/i.test(mail.url.trim()) ? mail.url.trim() : 'mailto:' + mail.url.trim()) : '';
+    const arClass = i => ['', 'ar-mid', 'ar-sq'][i % 3];   // 卡片比例循环:4/5 → 3/4 → 1/1
+
+    let worksContent;
+    if (!filtered.length) {
+      worksContent = `<div class="gal-empty">${esc(t('emptyWorks'))}</div>`;
+    } else {
+      const f = filtered[0];
+      const fimg = safeImg(f.image);
+      const feature = `
+        <article class="gal-feature" data-proj="${f.id}">
+          <div class="gal-feature-img ${fimg ? '' : 'empty'}">
+            ${fimg ? `<img src="${esc(fimg)}" alt="">` : '<div class="ph"></div>'}
+          </div>
+          <div class="gal-feature-body">
+            <h2>${esc(f.title)}</h2>
+            <div class="meta"><span class="n">— 001</span>${esc(tagLabel((f.tags || [])[0]) || (EN() ? 'Selected' : '精选'))}</div>
+          </div>
+        </article>`;
+      const grid = filtered.length > 1 ? `
+        <div class="gal-grid">
+          ${filtered.slice(1).map((p, i) => {
+            const pimg = safeImg(p.image);
+            return `
+            <article class="gal-card ${arClass(i)}" data-proj="${p.id}">
+              <div class="gal-card-img ${pimg ? '' : 'empty'}">
+                ${pimg ? `<img src="${esc(pimg)}" alt="">` : '<div class="ph"></div>'}
+              </div>
+              <div class="gal-card-body">
+                <div class="left">
+                  <h3>${esc(p.title)}</h3>
+                  <div class="cat">${esc(tagLabel((p.tags || [])[0]) || 'untitled')}</div>
+                </div>
+                <div class="num">— ${String(i + 2).padStart(3, '0')}</div>
+              </div>
+            </article>
+          `;
+          }).join('')}
+        </div>` : '';
+      worksContent = feature + grid;
+    }
 
     const tabContent = state.tab === 'about' ? renderAboutPanel() : `
       <div class="gal-section">
-        <span class="title">— Selected Works</span>
-        <span class="count">${String(filtered.length).padStart(2, '0')} / ${String(state.projects.length).padStart(2, '0')}</span>
+        <span class="title">${EN() ? 'Selected Works' : '精选作品'}</span>
+        <span class="count">${filtered.length ? '001 — ' : ''}${String(filtered.length).padStart(3, '0')}</span>
       </div>
       <div class="gal-tools tag-bar">
         <div class="tag-chips">
@@ -2130,47 +2196,30 @@ body.is-previewing { padding-top: 52px; }
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ add a piece</button>' : ''}
       </div>
-      ${filtered.length ? `
-        <div class="gal-grid">
-          ${filtered.map((p, i) => `
-            <div class="gal-card" data-proj="${p.id}">
-              <div class="gal-card-img ${p.image ? '' : 'empty'}">
-                ${p.image ? `<img src="${p.image}" alt="">` : '<div class="ph"></div>'}
-              </div>
-              <div class="gal-card-body">
-                <div class="left">
-                  <h3>${esc(p.title)}</h3>
-                  <div class="cat">${esc(tagLabel((p.tags || [])[0]) || 'untitled')}</div>
-                </div>
-                <div class="num">— ${String(i + 1).padStart(3, '0')}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      ` : '<div class="gal-empty">— nothing here yet —</div>'}
+      ${worksContent}
     `;
 
     root.innerHTML = `
       <div class="gal-frame">
-        <div class="gal-top">
-          <div class="name">${esc(getDisplayName())}</div>
-          <div class="meta">PORTFOLIO · ${new Date().getFullYear()}</div>
-        </div>
+        <nav class="gal-nav">
+          <div class="brand" data-tab="projects"><span class="dot"></span>${esc(name)}</div>
+          <div class="links">
+            <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks'))}</button>
+            <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout'))}</button>
+            ${mailHref ? `<a class="contact" href="${esc(mailHref)}">${EN() ? 'Contact' : '联系'}</a>` : ''}
+          </div>
+        </nav>
         <div class="gal-hero">
           <div class="left">
-            <div class="marker">— Portfolio</div>
-            <h1>${esc(getDisplayName())}</h1>
+            <div class="marker">— ${EN() ? 'Portfolio' : '作品集'} · ${new Date().getFullYear()}</div>
+            <h1>${esc(name)}</h1>
             <div class="deck">${esc(getTagline())}</div>
-            <div class="tab-nav" style="margin-top:3rem;">
-              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks'))}</button>
-              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout'))}</button>
-            </div>
           </div>
           <div class="right">${portrait}</div>
         </div>
         ${tabContent}
         <footer class="gal-footer">
-          <div class="copy">© ${new Date().getFullYear()} ${esc(getDisplayName())}</div>
+          <div class="copy">© ${new Date().getFullYear()} ${esc(name)}</div>
           <div class="socials">
             ${getSocials().map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join('')}
           </div>
@@ -2254,11 +2303,15 @@ body.is-previewing { padding-top: 52px; }
         <div class="about-panel">
           <h2>${esc(t('aboutLabel'))}</h2>
           ${bio
-            ? `<p style="line-height:1.7;white-space:pre-wrap;">${esc(bio)}</p>`
+            ? `<p class="about-bio">${esc(bio)}</p>`
             : `<p style="opacity:0.5;font-size:14px;">${esc(t('aboutEmpty'))}</p>`}
-          ${socials.length ? `<div style="margin-top:1.5rem;display:flex;gap:1rem;flex-wrap:wrap;">
-            ${socials.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:13px;text-decoration:underline;">${esc(s.name)}</a>`).join('')}
-          </div>` : ''}
+          ${socials.length ? `
+            <div class="about-contact">
+              <div class="about-contact-label">${EN() ? 'Contact / Elsewhere' : '联系方式'}</div>
+              <div class="about-contact-list">
+                ${socials.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join('')}
+              </div>
+            </div>` : ''}
         </div>`;
     }
     // 作者本人编辑视图(面板文案保持中文);中文/英文两个编辑区共用图片、社交、排序
