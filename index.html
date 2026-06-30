@@ -79,6 +79,14 @@ img { display: block; max-width: 100%; }
 .upload-zone.has-img { padding: 0; background: none; border: 1px solid #e3e3df; overflow: hidden; }
 .upload-zone.has-img img { width: 100%; max-height: 240px; object-fit: contain; }
 
+/* ── 编辑器:内容语言开关 ── */
+.editor-langbar { display: flex; align-items: center; gap: 8px; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.editor-langbar-label { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #999; }
+.editor-langbtn { font-size: 13px; padding: 5px 14px; border-radius: 999px; border: 1px solid #d4d4d0; color: #1a1a1a; background: #fff; }
+.editor-langbtn:hover { background: #f3f3f0; }
+.editor-langbtn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.editor-lang-hint { font-size: 12px; color: #999; flex-basis: 100%; }
+
 /* ── 拖动排序(仅管理员)── */
 [data-proj].reorderable { cursor: grab; }
 [data-proj].reorderable:active { cursor: grabbing; }
@@ -221,6 +229,22 @@ body.is-static .adminbar, body.is-static #preview-banner { display: none !import
   font-size: 13px; padding: 9px 12px; border-radius: 6px; white-space: nowrap;
 }
 .export-menu button:hover { background: #f3f3f0; }
+
+/* ── 语言切换(访客可见 · 含静态发布版)── */
+.lang-toggle {
+  position: fixed; bottom: 1.4rem; right: 1.4rem; z-index: 300;
+  display: flex; gap: 2px;
+  background: rgba(20,20,20,0.82); border-radius: 999px; padding: 3px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  font-family: 'Inter', sans-serif;
+}
+.lang-toggle button { font-size: 12px; font-weight: 600; color: #bbb; padding: 5px 13px; border-radius: 999px; letter-spacing: 0.02em; }
+.lang-toggle button:hover { color: #fff; }
+.lang-toggle button.active { background: #fff; color: #1a1a1a; }
+.lang-toggle button.active:hover { color: #1a1a1a; }
+body.is-previewing .lang-toggle { display: none !important; }
+@media (max-width: 720px) { .lang-toggle { bottom: 1rem; right: 1rem; } }
 
 /* ============================================================
    STYLE 1: MAGAZINE EDITORIAL
@@ -737,6 +761,22 @@ body[data-theme="studio"] .about-panel textarea {
 .about-panel .danger-zone { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(127,127,127,0.2); }
 .about-panel .danger-zone .label { color: #c43d3d; }
 
+/* ── 关于面板:中/英编辑开关 + 标签翻译 ── */
+.about-langbar { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; }
+.about-langbar-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.6; margin-right: 4px; }
+.about-langbtn { font-size: 13px; padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(127,127,127,0.4); opacity: 0.7; }
+.about-langbtn:hover { opacity: 1; }
+.about-langbtn.active { background: currentColor; opacity: 1; }
+.about-langbtn.active { color: inherit; }
+body[data-theme="studio"] .about-langbtn.active { background: #f4e409; color: #0e0e0e; border-color: #f4e409; }
+body[data-theme="mag"] .about-langbtn.active,
+body[data-theme="gallery"] .about-langbtn.active,
+body[data-theme="warm"] .about-langbtn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.tagtrans { display: flex; flex-direction: column; gap: 8px; }
+.tagtrans-row { display: flex; align-items: center; gap: 10px; }
+.tagtrans-key { flex: none; min-width: 96px; font-size: 13px; opacity: 0.8; word-break: break-all; }
+.tagtrans-row input { flex: 1; min-width: 0; }
+
 .tab-nav { display: flex; gap: 1.5rem; padding: 0 0 1rem; }
 body[data-theme="mag"] .tab-nav { font-family: 'Fraunces', serif; font-style: italic; }
 body[data-theme="studio"] .tab-nav { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; }
@@ -1160,6 +1200,12 @@ body.is-previewing { padding-top: 52px; }
   </div>
 </div>
 
+<!-- Language toggle (visitor-facing, shown on portfolio screen) -->
+<div id="lang-toggle" class="lang-toggle" style="display:none;">
+  <button data-lang="zh">中</button>
+  <button data-lang="en">EN</button>
+</div>
+
 <div id="modal-container"></div>
 <div id="toast-container"></div>
 
@@ -1182,8 +1228,98 @@ body.is-previewing { padding-top: 52px; }
     projects: [],
     filterTag: 'all',
     tab: 'projects',
-    editingId: null
+    editingId: null,
+    lang: 'en'          // 访客语言:线上默认英文;由 resolveInitialLang 决定
   };
+
+  /* ── I18N(双语:中文为主版,英文为覆盖层,英文空则逐字段回退中文)── */
+  const LANG_KEY = 'folio_lang';
+  const EN = () => state.lang === 'en';
+  // 取本地化文字:英文模式且英文非空 → 英文;否则回退中文
+  function loc(zh, en) {
+    const z = zh == null ? '' : String(zh);            // 始终返回字符串,防 JSONB 里混入对象渲染成 [object Object]
+    if (EN()) { const e = en == null ? '' : String(en); return e.trim() ? e : z; }
+    return z;
+  }
+  function resolveInitialLang(snapDefault) {
+    let q = null;
+    try { q = new URLSearchParams(location.search).get('lang'); } catch (_) {}
+    if (q === 'en' || q === 'zh') return q;
+    try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'zh') return s; } catch (_) {}
+    if (snapDefault === 'en' || snapDefault === 'zh') return snapDefault;
+    return 'en';
+  }
+  function setLang(l) {
+    if ((l !== 'en' && l !== 'zh') || l === state.lang) return;
+    state.lang = l;
+    try { localStorage.setItem(LANG_KEY, l); } catch (_) {}
+    document.documentElement.lang = (l === 'en' ? 'en' : 'zh-CN');
+    syncLangToggle();
+    $('bar-user').textContent = getDisplayName();
+    renderTheme();
+  }
+  function syncLangToggle() {
+    document.querySelectorAll('#lang-toggle button').forEach(b =>
+      b.classList.toggle('active', b.dataset.lang === state.lang));
+  }
+  // 访客可见的界面文案(管理员专属控件如"+新文章""编辑器"等仅作者本人可见,保持中文)
+  const UI = {
+    zh: {
+      navWorks: '作品', navAbout: '关于', all: '全部', filterLabel: '分类:',
+      noImg: '无图', readMore: '阅读全文 →', noDesc: '(没有描述)',
+      techLabel: '技术 / 工具:', galleryTitle: '项目图集',
+      magKicker: '作品集 · 个人主页', magSection: '作品 / Works', magCat: '随笔',
+      studioHint: '— 拖动节点 · 点节点看详情 · 悬停高亮它的连线',
+      warmSection: '最近在做', warmGreeting: '你好,我是', warmDescFallback: '还没有描述,点开看看。',
+      emptyWorks: '还没有作品。', aboutLabel: '关于', aboutEmpty: '暂无介绍。',
+      rAbout: '关于我', rProjects: '作品 / 项目', rTech: '技术 / 工具：', rLink: '链接：', rUntitled: '(未命名项目)'
+    },
+    en: {
+      navWorks: 'Work', navAbout: 'About', all: 'All', filterLabel: 'Filter:',
+      noImg: 'No image', readMore: 'Read more →', noDesc: '(No description)',
+      techLabel: 'Tools:', galleryTitle: 'Gallery',
+      magKicker: 'Portfolio · Personal', magSection: 'Selected Works', magCat: 'Essay',
+      studioHint: '— drag nodes · click to open · hover to highlight links',
+      warmSection: 'Recent Work', warmGreeting: "Hi, I'm", warmDescFallback: 'No description yet — click to view.',
+      emptyWorks: 'Nothing here yet.', aboutLabel: 'About', aboutEmpty: 'No bio yet.',
+      rAbout: 'About', rProjects: 'Projects', rTech: 'Tools: ', rLink: 'Link: ', rUntitled: '(Untitled)'
+    }
+  };
+  const t = k => (UI[EN() ? 'en' : 'zh'][k] ?? UI.zh[k] ?? k);
+  const enProfile = () => (state.profile.i18n && state.profile.i18n.en) || {};
+  // 标签:中文词当内部 key(筛选不动);英文模式按字典显示,未翻译回退中文
+  function tagLabel(tg) {
+    if (!EN()) return tg;
+    // 用 Object.hasOwn 取值:tag 名为 __proto__/toString/constructor 时不会踩到原型成员(与 safeVideo 一致)
+    const m = enProfile().tags;
+    if (m && Object.hasOwn(m, tg)) {
+      const v = String(m[tg]);
+      if (v.trim()) return v;
+    }
+    return tg;
+  }
+  function allCanonicalTags() {
+    const s = new Set();
+    state.projects.forEach(p => (p.tags || []).forEach(tg => s.add(tg)));
+    return [...s];
+  }
+  // 把一个项目按当前语言"本地化":文字字段取对应语言,图集/视频说明取 caption_en;
+  // 标签保持中文 key(显示时再过 tagLabel),id/图片/视频/链接/排序等共用字段原样保留
+  function viewProject(p) {
+    const en = EN() ? ((p.i18n && p.i18n.en) || {}) : {};
+    const cap = item => {
+      const zh = item.caption == null ? '' : String(item.caption);   // 只返回字符串
+      if (EN()) { const e = item.caption_en == null ? '' : String(item.caption_en); return e.trim() ? e : zh; }
+      return zh;
+    };
+    return Object.assign({}, p, {
+      title:       loc(p.title, en.title),
+      description: loc(p.description, en.description),
+      tech:        loc(p.tech, en.tech),
+      gallery:     (p.gallery || []).map(g => Object.assign({}, g, { caption: cap(g) })),
+      videos:      (p.videos  || []).map(v => Object.assign({}, v, { caption: cap(v) }))
+    });
+  }
 
   /* ── UTILS ── */
   const $ = id => document.getElementById(id);
@@ -1232,7 +1368,11 @@ body.is-previewing { padding-top: 52px; }
     if (!Object.hasOwn(VIDEO_PROVIDERS, v.provider)) return null;
     const p = VIDEO_PROVIDERS[v.provider];
     if (typeof v.id !== 'string' || !p.id.test(v.id)) return null;
-    return { provider: v.provider, id: v.id, caption: typeof v.caption === 'string' ? v.caption : '' };
+    return {
+      provider: v.provider, id: v.id,
+      caption:    typeof v.caption    === 'string' ? v.caption    : '',
+      caption_en: typeof v.caption_en === 'string' ? v.caption_en : ''   // 视频说明的英文版,跟视频走
+    };
   }
   // 清洗整个 videos 字段:坏值/非数组兜底成 [],逐条校验,并截断到上限
   // (上限也要管 DB/静态快照里的已有数据,不能只在 UI 新增时限制)
@@ -1264,6 +1404,8 @@ body.is-previewing { padding-top: 52px; }
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     $(id).classList.add('active');
+    const lt = $('lang-toggle');                      // 仅作品集页(enterMain)显示,其余页面隐藏
+    if (lt && id !== 'main') lt.style.display = 'none';
   }
 
   /* ── ROUTING ── */
@@ -1331,7 +1473,8 @@ body.is-previewing { padding-top: 52px; }
       tagline: prof.tagline,
       bio:     prof.bio,
       avatar:  prof.avatar,
-      social:  prof.social || []
+      social:  prof.social || [],
+      i18n:    prof.i18n || {}      // { en: { name, tagline, bio, tags:{中文标签:English} } }
     };
 
     const { data: projects } = await sb
@@ -1363,6 +1506,7 @@ body.is-previewing { padding-top: 52px; }
       bio:        state.profile.bio     || null,
       avatar:     state.profile.avatar  || null,
       social:     state.profile.social  || [],
+      i18n:       state.profile.i18n    || {},
       updated_at: new Date().toISOString()
     });
     if (error) { toast('保存失败: ' + error.message); return false; }
@@ -1382,6 +1526,7 @@ body.is-previewing { padding-top: 52px; }
       image:         proj.image         || null,
       gallery:       proj.gallery       || [],
       videos:        proj.videos        || [],
+      i18n:          proj.i18n          || {},
       created_epoch: proj.created_epoch || Date.now()
     });
     if (error) { console.error('persistProject 失败:', error); toast('保存失败: ' + (error.message || error.code || '未知错误')); return false; }
@@ -1416,8 +1561,7 @@ body.is-previewing { padding-top: 52px; }
   function enterMain() {
     document.body.setAttribute('data-theme', state.theme);
     document.body.classList.toggle('is-previewing', !!state.previewing);
-    $('bar-user').textContent = state.profile.name
-      || state.user?.user_metadata?.user_name || '';
+    $('bar-user').textContent = getDisplayName();
     const adminbar = document.querySelector('.adminbar');
     if (state.previewing) {
       adminbar.style.display = 'none';
@@ -1430,13 +1574,16 @@ body.is-previewing { padding-top: 52px; }
       $('bar-copy-link').style.display = state.isAdmin ? '' : 'none';
       $('bar-login').style.display  = state.user ? 'none' : '';
     }
-    ['mag', 'studio', 'gallery', 'warm'].forEach(t =>
-      $('root-' + t).style.display = 'none');
+    ['mag', 'studio', 'gallery', 'warm'].forEach(th =>
+      $('root-' + th).style.display = 'none');
     $('root-' + state.theme).style.display = 'block';
     showScreen('main');
     renderTheme();
     const banner = $('preview-banner');
     if (banner) banner.classList.toggle('show', !!state.previewing);
+    const lt = $('lang-toggle');                       // 预览模式不显示语言开关
+    if (lt) lt.style.display = state.previewing ? 'none' : 'flex';
+    syncLangToggle();
   }
 
   /* ── PREVIEW MODE ── */
@@ -1490,7 +1637,8 @@ body.is-previewing { padding-top: 52px; }
       avatar:  (state.profile && state.profile.avatar)  || null,
       social:  (state.profile && state.profile.social && state.profile.social.length)
         ? state.profile.social
-        : [{ name: 'GitHub', url: '#' }, { name: 'Email', url: '#' }]
+        : [{ name: 'GitHub', url: '#' }, { name: 'Email', url: '#' }],
+      i18n:    (state.profile && state.profile.i18n) || {}
     };
     state.projects  = SAMPLE_PROJECTS;
     state.tab       = 'projects';
@@ -1541,7 +1689,7 @@ body.is-previewing { padding-top: 52px; }
     seed = seed || (state.profile.name || 'x').charCodeAt(0);
     const variant = seed % 4;
     if (theme === 'mag') {
-      const letter = (state.profile.name || '?').charAt(0).toUpperCase();
+      const letter = (getDisplayName() || '?').charAt(0).toUpperCase();
       return `<svg viewBox="0 0 100 100">
         <circle cx="50" cy="50" r="44" fill="none" stroke="#2a2418" stroke-width="0.5"/>
         <circle cx="50" cy="50" r="36" fill="none" stroke="#2a2418" stroke-width="1.5"/>
@@ -1581,19 +1729,21 @@ body.is-previewing { padding-top: 52px; }
     attachTabHandlers();
   }
 
-  function getDisplayName() { return state.profile.name || state.user?.user_metadata?.user_name || '作品集'; }
-  function getTagline()     { return state.profile.tagline || '展示我的创作与思考'; }
+  function getDisplayName() { return loc(state.profile.name, enProfile().name) || state.user?.user_metadata?.user_name || loc('作品集', 'Portfolio'); }
+  function getTagline()     { return loc(state.profile.tagline, enProfile().tagline) || loc('展示我的创作与思考', 'My work & thoughts'); }
+  function getBio()         { return loc(state.profile.bio, enProfile().bio); }
   function getSocials()     { return state.profile.social || []; }
 
   function getFilteredProjects() {
-    // 按"该标签下的项目数量"降序排,数量并列时按名称稳定排序
+    // 按"该标签下的项目数量"降序排,数量并列时按名称稳定排序(标签按中文 key 统计/筛选,不受语言影响)
     const counts = {};
-    state.projects.forEach(p => (p.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
+    state.projects.forEach(p => (p.tags || []).forEach(tg => { counts[tg] = (counts[tg] || 0) + 1; }));
     const allTags  = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, 'zh'));
-    const filtered = state.filterTag === 'all'
+    const base = state.filterTag === 'all'
       ? state.projects
       : state.projects.filter(p => (p.tags || []).includes(state.filterTag));
-    return { allTags, filtered };
+    // 渲染用的是"按当前语言本地化"后的副本;标签 key 仍是中文(显示时过 tagLabel)
+    return { allTags, filtered: base.map(viewProject) };
   }
 
   /* ── MAGAZINE ── */
@@ -1608,14 +1758,14 @@ body.is-previewing { padding-top: 52px; }
     const tabContent = state.tab === 'about' ? renderAboutPanel() : `
       <div class="mag-section-rule">
         <span class="num">01</span>
-        <span class="title">作品 / Works</span>
+        <span class="title">${esc(t('magSection'))}</span>
         <span class="line"></span>
       </div>
       <div class="mag-tools tag-bar">
-        <span class="filter-label">分类:</span>
+        <span class="filter-label">${esc(t('filterLabel'))}</span>
         <div class="tag-chips">
-          <span class="filter-chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</span>
-          ${allTags.map(t => `<span class="filter-chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`).join('')}
+          <span class="filter-chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">${esc(t('all'))}</span>
+          ${allTags.map(tg => `<span class="filter-chip ${state.filterTag === tg ? 'active' : ''}" data-tag="${esc(tg)}">${esc(tagLabel(tg))}</span>`).join('')}
         </div>
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ 新文章</button>' : ''}
@@ -1624,13 +1774,13 @@ body.is-previewing { padding-top: 52px; }
         <div class="mag-feed">
           <article class="mag-card mag-feature" data-proj="${filtered[0].id}">
             <div class="mag-card-img ${filtered[0].image ? '' : 'empty'}">
-              ${filtered[0].image ? `<img src="${filtered[0].image}" alt="">` : '<span>无图</span>'}
+              ${filtered[0].image ? `<img src="${filtered[0].image}" alt="">` : `<span>${esc(t('noImg'))}</span>`}
             </div>
             <div class="mag-card-body">
-              <div class="cat">${esc((filtered[0].tags || [])[0] || '随笔')}</div>
+              <div class="cat">${esc(tagLabel((filtered[0].tags || [])[0]) || t('magCat'))}</div>
               <h2>${esc(filtered[0].title)}</h2>
               <p>${esc(filtered[0].description || '').slice(0, 200)}${(filtered[0].description || '').length > 200 ? '…' : ''}</p>
-              <span class="readmore">阅读全文 →</span>
+              <span class="readmore">${esc(t('readMore'))}</span>
             </div>
           </article>
           ${filtered.length > 1 ? `
@@ -1638,20 +1788,20 @@ body.is-previewing { padding-top: 52px; }
               ${filtered.slice(1).map(p => `
                 <article class="mag-grid-card" data-proj="${p.id}">
                   <div class="mag-grid-img ${p.image ? '' : 'empty'}">
-                    ${p.image ? `<img src="${p.image}" alt="">` : '<span>无图</span>'}
+                    ${p.image ? `<img src="${p.image}" alt="">` : `<span>${esc(t('noImg'))}</span>`}
                   </div>
                   <div class="mag-grid-body">
-                    <div class="cat">${esc((p.tags || [])[0] || '随笔')}</div>
+                    <div class="cat">${esc(tagLabel((p.tags || [])[0]) || t('magCat'))}</div>
                     <h3>${esc(p.title)}</h3>
                     <p>${esc((p.description || '').slice(0, 120))}${(p.description || '').length > 120 ? '…' : ''}</p>
-                    <span class="readmore">阅读全文 →</span>
+                    <span class="readmore">${esc(t('readMore'))}</span>
                   </div>
                 </article>
               `).join('')}
             </div>
           ` : ''}
         </div>
-      ` : '<div class="mag-empty">还没有作品。点击 + 新文章 开始第一篇。</div>'}
+      ` : `<div class="mag-empty">${esc(t('emptyWorks'))}</div>`}
     `;
 
     root.innerHTML = `
@@ -1662,11 +1812,11 @@ body.is-previewing { padding-top: 52px; }
         </div>
         <div class="mag-hero">
           <div class="left">
-            <div class="kicker">作品集 · 个人主页</div>
+            <div class="kicker">${esc(t('magKicker'))}</div>
             <h1>${esc(getDisplayName())}<em>.</em></h1>
             <div class="tab-nav">
-              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">作品</button>
-              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">关于</button>
+              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks'))}</button>
+              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout'))}</button>
             </div>
           </div>
           <div class="right">
@@ -1704,14 +1854,14 @@ body.is-previewing { padding-top: 52px; }
       </div>
       <div class="studio-tools tag-bar">
         <div class="tag-chips">
-          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">ALL</button>
-          ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t).toUpperCase()}</button>`).join('')}
+          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">${esc(t('all').toUpperCase())}</button>
+          ${allTags.map(tg => `<button class="chip ${state.filterTag === tg ? 'active' : ''}" data-tag="${esc(tg)}">${esc(String(tagLabel(tg)).toUpperCase())}</button>`).join('')}
         </div>
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ NEW PROJECT</button>' : ''}
       </div>
       ${filtered.length
-        ? '<div class="studio-constel" id="studio-constel" aria-label="作品关系网"></div><div class="studio-constel-hint">— 拖动节点 · 点节点看详情 · 悬停高亮它的连线</div>'
+        ? `<div class="studio-constel" id="studio-constel" aria-label="作品关系网"></div><div class="studio-constel-hint">${esc(t('studioHint'))}</div>`
         : '<div class="studio-empty">— EMPTY / ADD YOUR FIRST PROJECT —</div>'}
     `;
 
@@ -1729,8 +1879,8 @@ body.is-previewing { padding-top: 52px; }
               <h1>${esc(namePart1)}<span class="accent">${esc(nameAccent || '.')}</span></h1>
               <div class="deck">${esc(getTagline())}</div>
               <div class="tab-nav" style="margin-top:2rem;">
-                <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">WORK</button>
-                <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">ABOUT</button>
+                <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks').toUpperCase())}</button>
+                <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout').toUpperCase())}</button>
               </div>
             </div>
             <div class="right">
@@ -1795,7 +1945,7 @@ body.is-previewing { padding-top: 52px; }
     const links = [];
     projects.forEach(p => links.push({ s: center, t: byId[p.id], dist: minDim() * 0.44, k: 0.028, tag: false }));
     const byTag = Object.create(null);  // 无原型,防 tag 名为 constructor/__proto__ 时踩原型属性
-    projects.forEach(p => (p.tags || []).forEach(t => (byTag[t] = byTag[t] || []).push(p.id)));
+    projects.forEach(p => (p.tags || []).forEach(tg => (byTag[tg] = byTag[tg] || []).push(p.id)));
     const seen = new Set();
     Object.values(byTag).forEach(ids => {
       for (let i = 0; i + 1 < ids.length; i++) {
@@ -1885,7 +2035,7 @@ body.is-previewing { padding-top: 52px; }
         const ring = document.createElementNS(SVGNS, 'circle');
         ring.setAttribute('class', 'ring'); ring.setAttribute('r', n.r + 5);
         g.appendChild(ring);
-        g.appendChild(svgText('cat', n.r + 16, ((n.p.tags || [])[0] || 'WORK')));
+        g.appendChild(svgText('cat', n.r + 16, (tagLabel((n.p.tags || [])[0]) || 'WORK')));
         const _t = n.p.title || '';
         g.appendChild(svgText('label', n.r + 32, _t.length > 10 ? _t.slice(0, 10) + '…' : _t));
         g.addEventListener('mouseenter', () => n.edges.forEach(l => l.el.classList.add('hot')));
@@ -1974,8 +2124,8 @@ body.is-previewing { padding-top: 52px; }
       </div>
       <div class="gal-tools tag-bar">
         <div class="tag-chips">
-          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">All</button>
-          ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
+          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">${esc(t('all'))}</button>
+          ${allTags.map(tg => `<button class="chip ${state.filterTag === tg ? 'active' : ''}" data-tag="${esc(tg)}">${esc(tagLabel(tg))}</button>`).join('')}
         </div>
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ add a piece</button>' : ''}
@@ -1990,7 +2140,7 @@ body.is-previewing { padding-top: 52px; }
               <div class="gal-card-body">
                 <div class="left">
                   <h3>${esc(p.title)}</h3>
-                  <div class="cat">${esc((p.tags || [])[0] || 'untitled')}</div>
+                  <div class="cat">${esc(tagLabel((p.tags || [])[0]) || 'untitled')}</div>
                 </div>
                 <div class="num">— ${String(i + 1).padStart(3, '0')}</div>
               </div>
@@ -2012,8 +2162,8 @@ body.is-previewing { padding-top: 52px; }
             <h1>${esc(getDisplayName())}</h1>
             <div class="deck">${esc(getTagline())}</div>
             <div class="tab-nav" style="margin-top:3rem;">
-              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">Works</button>
-              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">About</button>
+              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks'))}</button>
+              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout'))}</button>
             </div>
           </div>
           <div class="right">${portrait}</div>
@@ -2039,11 +2189,11 @@ body.is-previewing { padding-top: 52px; }
     const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
 
     const tabContent = state.tab === 'about' ? renderAboutPanel() : `
-      <div class="warm-section"><span class="title">最近在做</span></div>
+      <div class="warm-section"><span class="title">${esc(t('warmSection'))}</span></div>
       <div class="warm-tools tag-bar">
         <div class="tag-chips">
-          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">全部</button>
-          ${allTags.map(t => `<button class="chip ${state.filterTag === t ? 'active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
+          <button class="chip ${state.filterTag === 'all' ? 'active' : ''}" data-tag="all">${esc(t('all'))}</button>
+          ${allTags.map(tg => `<button class="chip ${state.filterTag === tg ? 'active' : ''}" data-tag="${esc(tg)}">${esc(tagLabel(tg))}</button>`).join('')}
         </div>
         <button class="tag-toggle" data-action="toggle-tags" aria-label="展开标签" title="展开/收起标签">▾</button>
         ${state.isAdmin ? '<button class="add-btn" data-action="add">+ 新作品</button>' : ''}
@@ -2057,13 +2207,13 @@ body.is-previewing { padding-top: 52px; }
               </div>
               <div class="warm-card-body">
                 <h3>${esc(p.title)}</h3>
-                <p>${esc(p.description || '还没有描述,点开看看。')}</p>
-                ${(p.tags || []).length ? `<div class="meta">${(p.tags || []).map(t => `<span class="t">${esc(t)}</span>`).join('')}</div>` : ''}
+                <p>${esc(p.description || t('warmDescFallback'))}</p>
+                ${(p.tags || []).length ? `<div class="meta">${(p.tags || []).map(tg => `<span class="t">${esc(tagLabel(tg))}</span>`).join('')}</div>` : ''}
               </div>
             </div>
           `).join('')}
         </div>
-      ` : '<div class="warm-empty">还没有作品。点击 + 新作品,从第一个开始 ☕️</div>'}
+      ` : `<div class="warm-empty">${esc(t('emptyWorks'))}</div>`}
     `;
 
     root.innerHTML = `
@@ -2075,12 +2225,12 @@ body.is-previewing { padding-top: 52px; }
         <div class="warm-hero">
           ${portrait}
           <div>
-            <div class="greeting">你好,我是</div>
+            <div class="greeting">${esc(t('warmGreeting'))}</div>
             <h1>${esc(getDisplayName())}</h1>
             <div class="deck">${esc(getTagline())}</div>
             <div class="tab-nav" style="margin-top:1.2rem;">
-              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">作品</button>
-              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">关于</button>
+              <button data-tab="projects" class="${state.tab === 'projects' ? 'active' : ''}">${esc(t('navWorks'))}</button>
+              <button data-tab="about" class="${state.tab === 'about' ? 'active' : ''}">${esc(t('navAbout'))}</button>
             </div>
           </div>
         </div>
@@ -2098,23 +2248,72 @@ body.is-previewing { padding-top: 52px; }
   /* ── ABOUT PANEL ── */
   function renderAboutPanel() {
     if (!state.isAdmin) {
-      const bio     = state.profile.bio || '';
+      const bio     = getBio();
       const socials = getSocials();
       return `
         <div class="about-panel">
-          <h2>关于</h2>
+          <h2>${esc(t('aboutLabel'))}</h2>
           ${bio
             ? `<p style="line-height:1.7;white-space:pre-wrap;">${esc(bio)}</p>`
-            : '<p style="opacity:0.5;font-size:14px;">暂无介绍。</p>'}
+            : `<p style="opacity:0.5;font-size:14px;">${esc(t('aboutEmpty'))}</p>`}
           ${socials.length ? `<div style="margin-top:1.5rem;display:flex;gap:1rem;flex-wrap:wrap;">
             ${socials.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:13px;text-decoration:underline;">${esc(s.name)}</a>`).join('')}
           </div>` : ''}
         </div>`;
     }
+    // 作者本人编辑视图(面板文案保持中文);中文/英文两个编辑区共用图片、社交、排序
+    const al = state.aboutLang === 'en' ? 'en' : 'zh';
+    const enp = enProfile();
+    const langSwitch = `
+      <div class="about-langbar">
+        <span class="about-langbar-label">编辑语言</span>
+        <button class="about-langbtn ${al === 'zh' ? 'active' : ''}" data-action="about-lang-zh">中文</button>
+        <button class="about-langbtn ${al === 'en' ? 'active' : ''}" data-action="about-lang-en">English</button>
+      </div>`;
+
+    if (al === 'en') {
+      const tags = allCanonicalTags();
+      const dict = enp.tags || {};
+      const tagRows = tags.length
+        ? tags.map(tg => `
+            <div class="tagtrans-row">
+              <span class="tagtrans-key">${esc(tg)}</span>
+              <input type="text" data-tagkey="${esc(tg)}" value="${esc(dict[tg] || '')}" placeholder="English label">
+            </div>`).join('')
+        : '<div style="opacity:0.55;font-size:13px;">还没有标签。先在中文区给项目加标签,这里就能填它们的英文。</div>';
+      return `
+        <div class="about-panel">
+          <h2>关于 · English</h2>
+          ${langSwitch}
+          <p style="font-size:13px;opacity:0.65;margin-bottom:1.2rem;">这里填英文版,给国外面试官看。留空的字段,英文页会自动回退显示中文。头像、社交链接、排序中英共用,在中文区改即可。</p>
+          <div class="row">
+            <div class="label">Display name(英文名)</div>
+            <input type="text" id="about-name" value="${esc(enp.name || '')}" placeholder="Your name">
+          </div>
+          <div class="row">
+            <div class="label">Tagline(英文标语)</div>
+            <input type="text" id="about-tagline" value="${esc(enp.tagline || '')}" placeholder="One line about you">
+          </div>
+          <div class="row">
+            <div class="label">About(英文简介)</div>
+            <textarea id="about-bio" rows="5" placeholder="A short intro in English">${esc(enp.bio || '')}</textarea>
+          </div>
+          <div class="row">
+            <div class="label">标签翻译(中文 → English)</div>
+            <div class="tagtrans">${tagRows}</div>
+          </div>
+          <div class="actions">
+            <button class="btn-solid" data-action="save-about">保存英文版</button>
+            <span class="save-status" id="save-status"></span>
+          </div>
+        </div>`;
+    }
+
     const socials = (state.profile.social || []).map(s => `${s.name}|${s.url}`).join('\n');
     return `
       <div class="about-panel">
         <h2>关于</h2>
+        ${langSwitch}
         <div class="row">
           <div class="label">头像</div>
           <button class="btn-line" data-action="upload-avatar">${state.profile.avatar ? '更换头像' : '上传头像'}</button>
@@ -2352,6 +2551,12 @@ body.is-previewing { padding-top: 52px; }
       if (bar) bar.classList.toggle('tags-open', state.tagsExpanded);
     }
     else if (action === 'save-about')    saveAbout();
+    else if (action === 'about-lang-zh' || action === 'about-lang-en') {
+      const to = action === 'about-lang-en' ? 'en' : 'zh';
+      captureAboutInputs(state.aboutLang === 'en' ? 'en' : 'zh');  // 先暂存当前语言已输入但未保存的内容
+      state.aboutLang = to;
+      renderTheme();
+    }
     else if (action === 'upload-avatar') uploadAvatar();
     else if (action === 'remove-avatar') {
       delete state.profile.avatar;
@@ -2362,16 +2567,40 @@ body.is-previewing { padding-top: 52px; }
     }
   }
 
+  // 把"关于"面板当前可见输入读进 state(不落库)。中文区写主字段,英文区写 i18n.en。
+  function captureAboutInputs(fromLang) {
+    const nameEl = $('about-name'), tagEl = $('about-tagline'), bioEl = $('about-bio');
+    if (!nameEl || !tagEl || !bioEl) return;  // 面板不在/字段缺失
+    if (fromLang === 'en') {
+      state.profile.i18n = state.profile.i18n || {};
+      const en = state.profile.i18n.en = state.profile.i18n.en || {};
+      en.name    = nameEl.value.trim();
+      en.tagline = tagEl.value.trim();
+      en.bio     = bioEl.value.trim();
+      const dict = Object.create(null);   // 无原型:tag 名为 __proto__ 等也能正常存
+      document.querySelectorAll('[data-tagkey]').forEach(inp => {
+        const v = inp.value.trim();
+        if (v) dict[inp.dataset.tagkey] = v;   // 只存填了的;留空表示回退中文
+      });
+      en.tags = dict;
+    } else {
+      state.profile.name    = nameEl.value.trim();
+      state.profile.tagline = tagEl.value.trim();
+      state.profile.bio     = bioEl.value.trim();
+      const socEl = $('about-social');
+      if (socEl) {
+        state.profile.social = socEl.value.split('\n').map(line => {
+          const parts = line.split('|').map(s => (s || '').trim());
+          return parts[0] && parts[1] ? { name: parts[0], url: parts[1] } : null;
+        }).filter(Boolean);
+      }
+    }
+  }
+
   async function saveAbout() {
     const btn = document.querySelector('[data-action="save-about"]');
     setBtnLoading(btn, true);
-    state.profile.name    = $('about-name').value.trim();
-    state.profile.tagline = $('about-tagline').value.trim();
-    state.profile.bio     = $('about-bio').value.trim();
-    state.profile.social  = $('about-social').value.split('\n').map(line => {
-      const parts = line.split('|').map(s => (s || '').trim());
-      return parts[0] && parts[1] ? { name: parts[0], url: parts[1] } : null;
-    }).filter(Boolean);
+    captureAboutInputs(state.aboutLang === 'en' ? 'en' : 'zh');
     const ok = await persistProfile();
     if (!ok) { setBtnLoading(btn, false); return; }  // 失败:恢复按钮可重试(renderTheme 不重建,按钮还在)
     renderTheme();  // 成功后重渲染会换掉按钮,无需手动复位
@@ -2392,15 +2621,16 @@ body.is-previewing { padding-top: 52px; }
 
   /* ── DETAIL / EDITOR ── */
   function openDetail(id) {
-    const p = state.projects.find(x => x.id === id);
-    if (!p) return;
+    const praw = state.projects.find(x => x.id === id);
+    if (!praw) return;
+    const p = viewProject(praw);   // 按当前语言取文字/图说;标签仍是中文 key,显示时过 tagLabel
     const imgHtml  = p.image
       ? `<img src="${p.image}" style="width:100%;max-height:70vh;object-fit:contain;background:#f3f3f0;border-radius:6px;margin-bottom:1.2rem;">`
       : '';
     const tagHtml  = (p.tags || []).length
-      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;">${(p.tags || []).map(t => `<span style="font-size:11px;padding:3px 10px;background:#f3f3f0;border-radius:10px;color:#666;">${esc(t)}</span>`).join('')}</div>`
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;">${(p.tags || []).map(tg => `<span style="font-size:11px;padding:3px 10px;background:#f3f3f0;border-radius:10px;color:#666;">${esc(tagLabel(tg))}</span>`).join('')}</div>`
       : '';
-    const techHtml = p.tech ? `<div style="font-size:13px;margin:1rem 0;color:#777;"><strong style="color:#333;">技术 / 工具:</strong> ${esc(p.tech)}</div>` : '';
+    const techHtml = p.tech ? `<div style="font-size:13px;margin:1rem 0;color:#777;"><strong style="color:#333;">${esc(t('techLabel'))}</strong> ${esc(p.tech)}</div>` : '';
     const linkHtml = p.link ? `<div style="margin:1rem 0;"><a href="${esc(p.link)}" target="_blank" rel="noopener" style="color:#185fa5;">→ ${esc(p.link)}</a></div>` : '';
     const safeVideos = cleanVideos(p.videos);
     const videoHtml = safeVideos.length
@@ -2420,7 +2650,7 @@ body.is-previewing { padding-top: 52px; }
     const safeGallery = (p.gallery || []).filter(g => safeImg(g.url));
     const galleryHtml = safeGallery.length
       ? `<div class="detail-gallery">
-           <div class="detail-gallery-title">项目图集</div>
+           <div class="detail-gallery-title">${esc(t('galleryTitle'))}</div>
            ${safeGallery.map(g => `
              <figure class="detail-gallery-item">
                <img src="${esc(safeImg(g.url))}" alt="" loading="lazy">
@@ -2436,7 +2666,7 @@ body.is-previewing { padding-top: 52px; }
       : '';
     openModal(p.title,
       imgHtml + tagHtml + videoHtml +
-      `<p style="line-height:1.7;white-space:pre-wrap;color:#333;">${esc(p.description || '(没有描述)')}</p>` +
+      `<p style="line-height:1.7;white-space:pre-wrap;color:#333;">${esc(p.description || t('noDesc'))}</p>` +
       techHtml + linkHtml + galleryHtml + adminActions);
   }
 
@@ -2444,8 +2674,14 @@ body.is-previewing { padding-top: 52px; }
     state.editingId = p ? p.id : null;
     const d = p || { title: '', description: '', tags: [], tech: '', link: '', image: '', gallery: [], videos: [] };
     const body = `
+      <div id="editor-langbar" class="editor-langbar">
+        <span class="editor-langbar-label">内容语言</span>
+        <button type="button" class="editor-langbtn active" data-editlang="zh">中文</button>
+        <button type="button" class="editor-langbtn" data-editlang="en">English</button>
+        <span id="editor-lang-hint" class="editor-lang-hint">编辑中文版(主版本 · 标题必填)</span>
+      </div>
       <div class="form-row">
-        <span class="label">封面图片</span>
+        <span class="label">封面图片(中英共用)</span>
         <div class="upload-zone ${d.image ? 'has-img' : ''}" id="img-zone">
           ${d.image ? `<img src="${d.image}">` : '点击或拖动图片到此处上传'}
         </div>
@@ -2479,6 +2715,46 @@ body.is-previewing { padding-top: 52px; }
     const session = editorSession = {};  // 本次编辑会话令牌
     let imageData = d.image || '';
     let pendingUploads = 0;  // 正在压缩中的图片数;保存前必须为 0,否则会漏存
+
+    // ── 内容语言:中文(主版本)/ English(覆盖层)──
+    // 标题/描述/技术栈两套文字存在内存里,切换语言时换绑输入框;图说则挂在每张图/视频上
+    let editLang = 'zh';
+    const en0 = (d.i18n && d.i18n.en) || {};
+    const textZh = { title: d.title || '', description: d.description || '', tech: d.tech || '' };
+    const textEn = { title: en0.title || '', description: en0.description || '', tech: en0.tech || '' };
+    const textBucket = () => (editLang === 'en' ? textEn : textZh);
+    function captureEditorText() {
+      const b = textBucket();
+      if ($('p-title')) b.title = $('p-title').value;
+      if ($('p-desc'))  b.description = $('p-desc').value;
+      if ($('p-tech'))  b.tech = $('p-tech').value;
+    }
+    function fillEditorText() {
+      const b = textBucket();
+      if ($('p-title')) $('p-title').value = b.title;
+      if ($('p-desc'))  $('p-desc').value = b.description;
+      if ($('p-tech'))  $('p-tech').value = b.tech;
+    }
+    function syncEditLangUI() {
+      document.querySelectorAll('#editor-langbar [data-editlang]').forEach(b =>
+        b.classList.toggle('active', b.dataset.editlang === editLang));
+      const hint = $('editor-lang-hint');
+      if (hint) hint.textContent = editLang === 'en'
+        ? '编辑英文版 · 留空字段英文页自动回退中文 · 图片/视频/链接/标签中英共用'
+        : '编辑中文版(主版本 · 标题必填)';
+    }
+    function setEditLang(l) {
+      if ((l !== 'zh' && l !== 'en') || l === editLang) return;
+      captureEditorText();   // 先暂存当前语言已输入的文字
+      editLang = l;
+      fillEditorText();      // 再填入目标语言文字
+      syncEditLangUI();
+      renderGalleryList();   // 图说 / 视频说明也跟着语言切
+      renderVideoList();
+    }
+    document.querySelectorAll('#editor-langbar [data-editlang]').forEach(b =>
+      b.onclick = () => setEditLang(b.dataset.editlang));
+
     const zone = $('img-zone');
     const handleFile = f => {
       if (!f) return;
@@ -2520,7 +2796,7 @@ body.is-previewing { padding-top: 52px; }
     // 载入时就过滤掉非法 src(防数据库里被塞入恶意 URL)
     const galleryData = (d.gallery || [])
       .filter(g => g && safeImg(g.url))
-      .map(g => ({ url: g.url, caption: g.caption || '', path: g.path || '' }));
+      .map(g => ({ url: g.url, caption: g.caption || '', caption_en: g.caption_en || '', path: g.path || '' }));
     const removedPaths = [];          // 编辑中被删掉的图,保存成功后从 Storage 一并清理
     const sessionUploadedPaths = [];  // 本次编辑新传上去的图;若没保存就关闭,关闭时清掉
     let savedThisEdit = false;
@@ -2530,15 +2806,22 @@ body.is-previewing { padding-top: 52px; }
     function renderGalleryList() {
       const wrap = $('gallery-list');
       if (!wrap) return;  // 弹窗已关闭
-      wrap.innerHTML = galleryData.map((g, i) => `
+      wrap.innerHTML = galleryData.map((g, i) => {
+        const capVal = editLang === 'en' ? (g.caption_en || '') : (g.caption || '');
+        const capPh  = editLang === 'en' ? 'Caption in English (optional)' : '这张图是什么?写个说明';
+        return `
         <div class="gallery-edit-item" data-grow="${i}">
           <span class="gallery-drag" draggable="true" title="拖动排序" aria-label="拖动排序">⠿</span>
           <img src="${esc(safeImg(g.url))}" alt="" draggable="false">
-          <input type="text" class="gallery-cap" data-idx="${i}" value="${esc(g.caption)}" placeholder="这张图是什么?写个说明">
+          <input type="text" class="gallery-cap" data-idx="${i}" value="${esc(capVal)}" placeholder="${capPh}">
           <button type="button" class="btn-line btn-danger gallery-del" data-idx="${i}">删除</button>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       wrap.querySelectorAll('.gallery-cap').forEach(inp => {
-        inp.oninput = () => { galleryData[+inp.dataset.idx].caption = inp.value; };
+        inp.oninput = () => {
+          const it = galleryData[+inp.dataset.idx];
+          if (editLang === 'en') it.caption_en = inp.value; else it.caption = inp.value;
+        };
       });
       wrap.querySelectorAll('.gallery-del').forEach(btn => {
         btn.onclick = () => {
@@ -2605,7 +2888,7 @@ body.is-previewing { padding-top: 52px; }
               if (galleryData.length >= MAX_GALLERY) toast(`图集最多 ${MAX_GALLERY} 张`);
               return;
             }
-            galleryData.push({ url, caption: '', path });
+            galleryData.push({ url, caption: '', caption_en: '', path });
             sessionUploadedPaths.push(path);
             renderGalleryList();
           })
@@ -2634,16 +2917,21 @@ body.is-previewing { padding-top: 52px; }
       if (!wrap) return;  // 弹窗已关闭
       wrap.innerHTML = videoData.map((v, i) => {
         const label = (VIDEO_PROVIDERS[v.provider] || {}).label || v.provider;
+        const capVal = editLang === 'en' ? (v.caption_en || '') : (v.caption || '');
+        const capPh  = editLang === 'en' ? 'Caption in English (optional)' : '这个视频是什么?写个说明';
         return `
         <div class="gallery-edit-item" data-vrow="${i}">
           <span class="gallery-drag" draggable="true" title="拖动排序" aria-label="拖动排序">⠿</span>
           <span class="video-chip">${esc(label)}</span>
-          <input type="text" class="video-cap" data-idx="${i}" value="${esc(v.caption)}" placeholder="这个视频是什么?写个说明">
+          <input type="text" class="video-cap" data-idx="${i}" value="${esc(capVal)}" placeholder="${capPh}">
           <button type="button" class="btn-line btn-danger gallery-del" data-idx="${i}">删除</button>
         </div>`;
       }).join('');
       wrap.querySelectorAll('.video-cap').forEach(inp => {
-        inp.oninput = () => { videoData[+inp.dataset.idx].caption = inp.value; };
+        inp.oninput = () => {
+          const it = videoData[+inp.dataset.idx];
+          if (editLang === 'en') it.caption_en = inp.value; else it.caption = inp.value;
+        };
       });
       wrap.querySelectorAll('.gallery-del').forEach(btn => {
         btn.onclick = () => { videoData.splice(+btn.dataset.idx, 1); renderVideoList(); };
@@ -2693,7 +2981,7 @@ body.is-previewing { padding-top: 52px; }
       if (videoData.some(v => v.provider === parsed.provider && v.id === parsed.id)) {
         toast('这个视频已经添加过了'); inp.value = ''; return;
       }
-      videoData.push({ provider: parsed.provider, id: parsed.id, caption: '' });
+      videoData.push({ provider: parsed.provider, id: parsed.id, caption: '', caption_en: '' });
       inp.value = '';
       renderVideoList();
     };
@@ -2707,15 +2995,21 @@ body.is-previewing { padding-top: 52px; }
         const a = el.dataset.modalAction;
         if (a === 'cancel') return closeModal();
         if (a === 'save-proj') {
-          const title = $('p-title').value.trim();
-          if (!title) return toast('请输入标题');
           if (pendingUploads > 0) return toast('图片还在处理中,请稍候再保存');
-          // 兜底:把当前图集 / 视频说明输入框的最新值同步回数据
+          captureEditorText();   // 同步当前语言可见的标题/描述/技术栈
+          const title = textZh.title.trim();
+          if (!title) {
+            if (editLang === 'en') setEditLang('zh');   // 切回中文区让用户看到必填项
+            return toast('请输入中文标题(主版本必填)');
+          }
+          // 兜底:把当前图集 / 视频说明输入框最新值,按当前语言同步回数据
           $('gallery-list').querySelectorAll('.gallery-cap').forEach(inp => {
-            galleryData[+inp.dataset.idx].caption = inp.value;
+            const it = galleryData[+inp.dataset.idx];
+            if (it) { if (editLang === 'en') it.caption_en = inp.value; else it.caption = inp.value; }
           });
           $('video-list').querySelectorAll('.video-cap').forEach(inp => {
-            videoData[+inp.dataset.idx].caption = inp.value;
+            const it = videoData[+inp.dataset.idx];
+            if (it) { if (editLang === 'en') it.caption_en = inp.value; else it.caption = inp.value; }
           });
           const existing = state.editingId
             ? state.projects.find(x => x.id === state.editingId)
@@ -2723,13 +3017,14 @@ body.is-previewing { padding-top: 52px; }
           const proj = {
             id:            state.editingId || ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
             title,
-            description:   $('p-desc').value.trim(),
-            tech:          $('p-tech').value.trim(),
+            description:   textZh.description.trim(),
+            tech:          textZh.tech.trim(),
             link:          $('p-link').value.trim(),
             tags:          $('p-tags').value.split(',').map(s => s.trim()).filter(Boolean),
             image:         imageData,
             gallery:       galleryData,
             videos:        videoData,
+            i18n:          { en: { title: textEn.title.trim(), description: textEn.description.trim(), tech: textEn.tech.trim() } },
             created_epoch: existing?.created_epoch || Date.now()
           };
           setBtnLoading(el, true);
@@ -2866,6 +3161,10 @@ body.is-previewing { padding-top: 52px; }
   $('preview-back').onclick = cancelPreview;
   $('preview-ok').onclick   = confirmPreview;
 
+  /* ── LANGUAGE TOGGLE WIRING ── */
+  document.querySelectorAll('#lang-toggle button').forEach(b =>
+    b.onclick = () => setLang(b.dataset.lang));
+
   /* ── ADMIN BAR WIRING ── */
   $('bar-login').onclick  = loginWithGitHub;
   $('bar-logout').onclick = logout;
@@ -2931,7 +3230,8 @@ body.is-previewing { padding-top: 52px; }
     } catch (e) {
       toast('打包失败:读不到页面源码,请在已部署的网址上操作'); return;
     }
-    const snap = { theme: state.theme, profile: state.profile, projects: state.projects, published: new Date().toISOString() };
+    // defaultLang = 当前正在看的语言:在中文区导出 → 静态站默认中文(国内镜像);英文区导出 → 默认英文
+    const snap = { theme: state.theme, profile: state.profile, projects: state.projects, defaultLang: state.lang, published: new Date().toISOString() };
     // 把所有 < 转义成 <,防止项目文字里若含脚本闭合标记而截断注入脚本
     const json = JSON.stringify(snap).replace(/</g, '\\u003c');
     const inject = `<script>window.__FOLIO_SNAPSHOT__=${json};<\/script>\n`;
@@ -2951,10 +3251,11 @@ body.is-previewing { padding-top: 52px; }
   // Shared resume markup used by both PDF (print) and Word export.
   function buildResumeHTML() {
     const name    = getDisplayName();
-    const tagline = state.profile.tagline || '';
-    const bio     = state.profile.bio || '';
+    const tagline = getTagline();
+    const bio     = getBio();
     const socials = getSocials();
-    const projects = [...state.projects].sort((a, b) => (b.created_epoch || 0) - (a.created_epoch || 0));
+    // 按当前语言本地化每个项目(标题/描述/技术栈),再按时间排序
+    const projects = state.projects.map(viewProject).sort((a, b) => (b.created_epoch || 0) - (a.created_epoch || 0));
 
     const safeAvatar = safeImg(state.profile.avatar);
     const avatarHtml = safeAvatar
@@ -2967,24 +3268,24 @@ body.is-previewing { padding-top: 52px; }
       : '';
 
     const bioHtml = bio
-      ? `<section class="r-section"><h2>关于我</h2><p class="r-bio">${esc(bio)}</p></section>` : '';
+      ? `<section class="r-section"><h2>${esc(t('rAbout'))}</h2><p class="r-bio">${esc(bio)}</p></section>` : '';
 
     const projHtml = projects.length ? `
       <section class="r-section">
-        <h2>作品 / 项目</h2>
+        <h2>${esc(t('rProjects'))}</h2>
         ${projects.map(p => {
           const cover = safeImg(p.image);  // 只带封面图,不带详情图集
           const coverHtml = cover ? `<img class="r-cover" src="${esc(cover)}" alt="">` : '';
           const tags = (p.tags || []).length
-            ? `<div class="r-tags">${(p.tags || []).map(t => `<span class="r-tag">${esc(t)}</span>`).join('')}</div>` : '';
-          const tech = p.tech ? `<div class="r-meta"><strong>技术 / 工具：</strong>${esc(p.tech)}</div>` : '';
-          const link = p.link ? `<div class="r-meta"><strong>链接：</strong>${esc(p.link)}</div>` : '';
+            ? `<div class="r-tags">${(p.tags || []).map(tg => `<span class="r-tag">${esc(tagLabel(tg))}</span>`).join('')}</div>` : '';
+          const tech = p.tech ? `<div class="r-meta"><strong>${esc(t('rTech'))}</strong>${esc(p.tech)}</div>` : '';
+          const link = p.link ? `<div class="r-meta"><strong>${esc(t('rLink'))}</strong>${esc(p.link)}</div>` : '';
           const desc = p.description ? `<p class="r-desc">${esc(p.description)}</p>` : '';
           return `
             <div class="r-project">
               ${coverHtml}
               <div class="r-pbody">
-                <h3>${esc(p.title || '(未命名项目)')}</h3>
+                <h3>${esc(p.title || t('rUntitled'))}</h3>
                 ${tags}${desc}${tech}${link}
               </div>
             </div>`;
@@ -3132,10 +3433,14 @@ body.is-previewing { padding-top: 52px; }
     state.projects = snap.projects || [];
     state.filterTag = 'all';
     state.tab = 'projects';
+    state.lang = resolveInitialLang(snap.defaultLang);   // 静态站默认语言 = 导出时所看的语言
+    document.documentElement.lang = state.lang === 'en' ? 'en' : 'zh-CN';
     enterMain();
   }
 
   async function init() {
+    state.lang = resolveInitialLang(null);               // 线上默认英文(可被 ?lang= / localStorage 覆盖)
+    document.documentElement.lang = state.lang === 'en' ? 'en' : 'zh-CN';
     if (SNAPSHOT) { initStatic(SNAPSHOT); return; }
     const { data: { session } } = await sb.auth.getSession();
     state.user = session?.user ?? null;
